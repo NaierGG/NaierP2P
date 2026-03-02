@@ -1,0 +1,79 @@
+import 'dart:convert';
+
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+
+class SecureStorageService {
+  SecureStorageService(this._secureStorage);
+
+  static const _identityKey = 'identity_keypair';
+  static const _sessionKey = 'auth_session';
+  static const _channelBox = 'channel_keys';
+  static const _messageBox = 'message_cache';
+
+  final FlutterSecureStorage _secureStorage;
+
+  static Future<SecureStorageService> bootstrap() async {
+    await Hive.initFlutter();
+    await Future.wait([
+      Hive.openBox<String>(_channelBox),
+      Hive.openBox<String>(_messageBox),
+    ]);
+
+    return SecureStorageService(const FlutterSecureStorage());
+  }
+
+  Future<void> saveIdentityKeyPair(Map<String, String> keyPair) async {
+    await _secureStorage.write(key: _identityKey, value: jsonEncode(keyPair));
+  }
+
+  Future<Map<String, String>?> getIdentityKeyPair() async {
+    final value = await _secureStorage.read(key: _identityKey);
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+
+    final decoded = jsonDecode(value) as Map<String, dynamic>;
+    return decoded.map(
+      (key, value) => MapEntry(key, value.toString()),
+    );
+  }
+
+  Future<void> saveSession(Map<String, String?> session) async {
+    await _secureStorage.write(key: _sessionKey, value: jsonEncode(session));
+  }
+
+  Future<Map<String, String?>?> getSession() async {
+    final value = await _secureStorage.read(key: _sessionKey);
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+
+    final decoded = jsonDecode(value) as Map<String, dynamic>;
+    return decoded.map((key, value) => MapEntry(key, value?.toString()));
+  }
+
+  Future<void> clearSession() async {
+    await _secureStorage.delete(key: _sessionKey);
+  }
+
+  Future<void> saveChannelKey(String channelId, String key) async {
+    final box = Hive.box<String>(_channelBox);
+    await box.put(channelId, key);
+  }
+
+  String? getChannelKey(String channelId) {
+    final box = Hive.box<String>(_channelBox);
+    return box.get(channelId);
+  }
+
+  Future<void> cacheMessages(String channelId, String payload) async {
+    final box = Hive.box<String>(_messageBox);
+    await box.put(channelId, payload);
+  }
+
+  String? getCachedMessages(String channelId) {
+    final box = Hive.box<String>(_messageBox);
+    return box.get(channelId);
+  }
+}
