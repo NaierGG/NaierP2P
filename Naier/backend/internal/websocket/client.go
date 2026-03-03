@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	gorillaws "github.com/gorilla/websocket"
 	"github.com/google/uuid"
+	gorillaws "github.com/gorilla/websocket"
 )
 
 const (
@@ -107,4 +107,3 @@ func (c *Client) isSubscribed(channelID uuid.UUID) bool {
 	defer c.mu.RUnlock()
 	return c.Channels[channelID]
 }
-

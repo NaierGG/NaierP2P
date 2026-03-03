@@ -7,6 +7,26 @@ type ReactionDTO struct {
 	Emoji  string `json:"emoji"`
 }
 
+type ReactionEventDTO struct {
+	MessageID string    `json:"message_id"`
+	ChannelID string    `json:"channel_id"`
+	UserID    string    `json:"user_id"`
+	Emoji     string    `json:"emoji"`
+	Action    string    `json:"action"`
+	EventID   string    `json:"event_id"`
+	Sequence  int64     `json:"sequence"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type ReadStateDTO struct {
+	ChannelID        string    `json:"channel_id"`
+	UserID           string    `json:"user_id"`
+	LastReadSequence int64     `json:"last_read_sequence"`
+	EventID          string    `json:"event_id"`
+	Sequence         int64     `json:"sequence"`
+	CreatedAt        time.Time `json:"created_at"`
+}
+
 type MessageDTO struct {
 	ID            string        `json:"id"`
 	ChannelID     string        `json:"channel_id"`
@@ -51,11 +71,13 @@ type ListResponse struct {
 }
 
 type SyncEvent struct {
-	Type      string     `json:"type"`
-	Message   MessageDTO `json:"message"`
-	EventID   string     `json:"event_id"`
-	Sequence  int64      `json:"sequence"`
-	ChannelID string     `json:"channel_id"`
+	Type      string            `json:"type"`
+	Message   *MessageDTO       `json:"message,omitempty"`
+	Reaction  *ReactionEventDTO `json:"reaction,omitempty"`
+	ReadState *ReadStateDTO     `json:"read_state,omitempty"`
+	EventID   string            `json:"event_id"`
+	Sequence  int64             `json:"sequence"`
+	ChannelID string            `json:"channel_id"`
 }
 
 type SyncResponse struct {

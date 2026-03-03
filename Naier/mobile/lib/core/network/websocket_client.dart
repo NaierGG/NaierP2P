@@ -7,13 +7,16 @@ class MeshWebSocketClient {
   MeshWebSocketClient({
     required this.getToken,
     required this.baseUrl,
+    this.onConnected,
   });
 
   final String? Function() getToken;
   final String baseUrl;
+  final Future<void> Function()? onConnected;
 
   final StreamController<Map<String, dynamic>> _events =
       StreamController<Map<String, dynamic>>.broadcast();
+  final List<Map<String, dynamic>> _queuedEvents = <Map<String, dynamic>>[];
 
   WebSocketChannel? _channel;
   StreamSubscription? _subscription;
@@ -22,6 +25,7 @@ class MeshWebSocketClient {
   bool _manuallyClosed = false;
 
   Stream<Map<String, dynamic>> get events => _events.stream;
+  bool get isConnected => _channel != null;
 
   void connect() {
     if (_channel != null) {
@@ -36,6 +40,7 @@ class MeshWebSocketClient {
     _manuallyClosed = false;
     final uri = Uri.parse('$baseUrl?token=${Uri.encodeQueryComponent(token)}');
     _channel = WebSocketChannel.connect(uri);
+    unawaited(_handleConnected());
 
     _subscription = _channel!.stream.listen(
       (event) {
@@ -60,6 +65,10 @@ class MeshWebSocketClient {
   }
 
   void send(Map<String, dynamic> event) {
+    if (_channel == null) {
+      _queuedEvents.add(event);
+      return;
+    }
     final payload = jsonEncode(event);
     _channel?.sink.add(payload);
   }
@@ -91,5 +100,13 @@ class MeshWebSocketClient {
         _reconnectAttempts > 5 ? 30 : (1 << (_reconnectAttempts - 1)).clamp(1, 16);
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(Duration(seconds: delaySeconds), connect);
+  }
+
+  Future<void> _handleConnected() async {
+    for (final event in List<Map<String, dynamic>>.from(_queuedEvents)) {
+      _channel?.sink.add(jsonEncode(event));
+    }
+    _queuedEvents.clear();
+    await onConnected?.call();
   }
 }

@@ -28,6 +28,8 @@ func NewService(repo *Repository, validate *validatorpkg.Validator) *Service {
 	return &Service{repo: repo, validate: validate}
 }
 
+const globalSyncStreamName = "global"
+
 func (s *Service) ListByChannel(ctx context.Context, channelID, userID uuid.UUID, cursor string, limit int) (ListResponse, error) {
 	isMember, err := s.repo.IsChannelMember(ctx, channelID, userID)
 	if err != nil || !isMember {
@@ -194,18 +196,17 @@ func (s *Service) AddReaction(ctx context.Context, userID, messageID uuid.UUID, 
 		return uuid.Nil, nil, err
 	}
 
-	if err := s.repo.AddReaction(ctx, messageID, userID, emoji); err != nil {
+	reactionEvent, err := s.repo.AddReaction(ctx, messageID, userID, emoji)
+	if err != nil {
 		return uuid.Nil, nil, err
+	}
+	if reactionEvent == nil {
+		return channelID, nil, nil
 	}
 
 	event, err := marshalEvent(appws.WSEvent{
-		Type: appws.EventReaction,
-		Payload: mustJSON(map[string]string{
-			"messageId": messageID.String(),
-			"emoji":     emoji,
-			"userId":    userID.String(),
-			"action":    "add",
-		}),
+		Type:    appws.EventReaction,
+		Payload: mustJSON(reactionEvent),
 	})
 	if err != nil {
 		return uuid.Nil, nil, err
@@ -223,18 +224,17 @@ func (s *Service) RemoveReaction(ctx context.Context, userID, messageID uuid.UUI
 		return uuid.Nil, nil, err
 	}
 
-	if err := s.repo.RemoveReaction(ctx, messageID, userID, emoji); err != nil {
+	reactionEvent, err := s.repo.RemoveReaction(ctx, messageID, userID, emoji)
+	if err != nil {
 		return uuid.Nil, nil, err
+	}
+	if reactionEvent == nil {
+		return channelID, nil, nil
 	}
 
 	event, err := marshalEvent(appws.WSEvent{
-		Type: appws.EventReaction,
-		Payload: mustJSON(map[string]string{
-			"messageId": messageID.String(),
-			"emoji":     emoji,
-			"userId":    userID.String(),
-			"action":    "remove",
-		}),
+		Type:    appws.EventReaction,
+		Payload: mustJSON(reactionEvent),
 	})
 	if err != nil {
 		return uuid.Nil, nil, err
@@ -243,25 +243,49 @@ func (s *Service) RemoveReaction(ctx context.Context, userID, messageID uuid.UUI
 	return channelID, event, nil
 }
 
-func (s *Service) MarkRead(ctx context.Context, userID, channelID, messageID uuid.UUID) error {
+func (s *Service) MarkRead(ctx context.Context, userID, channelID, messageID uuid.UUID) ([]byte, error) {
 	isMember, err := s.repo.IsChannelMember(ctx, channelID, userID)
 	if err != nil || !isMember {
-		return ErrMessageDenied
+		return nil, ErrMessageDenied
 	}
 
-	return s.repo.MarkRead(ctx, channelID, userID)
+	lastReadSequence, err := s.repo.GetMessageSequence(ctx, messageID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrMessageNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return s.MarkReadSequence(ctx, userID, channelID, lastReadSequence)
 }
 
-func (s *Service) MarkReadSequence(ctx context.Context, userID, channelID uuid.UUID, lastReadSequence int64) error {
+func (s *Service) MarkReadSequence(ctx context.Context, userID, channelID uuid.UUID, lastReadSequence int64) ([]byte, error) {
 	isMember, err := s.repo.IsChannelMember(ctx, channelID, userID)
 	if err != nil || !isMember {
-		return ErrMessageDenied
+		return nil, ErrMessageDenied
 	}
 
-	return s.repo.MarkReadSequence(ctx, channelID, userID, lastReadSequence)
+	readState, err := s.repo.MarkReadSequence(ctx, channelID, userID, lastReadSequence)
+	if err != nil {
+		return nil, err
+	}
+	if readState == nil {
+		return nil, nil
+	}
+
+	return marshalEvent(appws.WSEvent{
+		Type:    appws.EventReadState,
+		Payload: mustJSON(readState),
+	})
 }
 
-func (s *Service) SyncEvents(ctx context.Context, userID uuid.UUID, afterEventID string, limit int) (SyncResponse, error) {
+func (s *Service) SyncEvents(ctx context.Context, userID, deviceID uuid.UUID, afterEventID string, limit int) (SyncResponse, error) {
+	afterEventID, err := s.resolveAfterEventID(ctx, deviceID, globalSyncStreamName, afterEventID)
+	if err != nil {
+		return SyncResponse{}, err
+	}
+
 	afterSequence, err := s.resolveAfterSequence(ctx, afterEventID)
 	if err != nil {
 		return SyncResponse{}, err
@@ -273,17 +297,29 @@ func (s *Service) SyncEvents(ctx context.Context, userID uuid.UUID, afterEventID
 	}
 
 	response := SyncResponse{
-		Events:   events,
-		HasMore:  hasMore,
+		Events:      events,
+		HasMore:     hasMore,
+		LastEventID: afterEventID,
 	}
 	if len(events) > 0 {
 		response.LastEventID = events[len(events)-1].EventID
+	}
+	if response.LastEventID != "" {
+		if err := s.persistOffset(ctx, deviceID, globalSyncStreamName, response.LastEventID); err != nil {
+			return SyncResponse{}, err
+		}
 	}
 
 	return response, nil
 }
 
-func (s *Service) SyncChannelEvents(ctx context.Context, userID, channelID uuid.UUID, afterEventID string, limit int) (SyncResponse, error) {
+func (s *Service) SyncChannelEvents(ctx context.Context, userID, deviceID, channelID uuid.UUID, afterEventID string, limit int) (SyncResponse, error) {
+	streamName := channelSyncStreamName(channelID)
+	afterEventID, err := s.resolveAfterEventID(ctx, deviceID, streamName, afterEventID)
+	if err != nil {
+		return SyncResponse{}, err
+	}
+
 	afterSequence, err := s.resolveAfterSequence(ctx, afterEventID)
 	if err != nil {
 		return SyncResponse{}, err
@@ -298,14 +334,28 @@ func (s *Service) SyncChannelEvents(ctx context.Context, userID, channelID uuid.
 	}
 
 	response := SyncResponse{
-		Events:   events,
-		HasMore:  hasMore,
+		Events:      events,
+		HasMore:     hasMore,
+		LastEventID: afterEventID,
 	}
 	if len(events) > 0 {
 		response.LastEventID = events[len(events)-1].EventID
 	}
+	if response.LastEventID != "" {
+		if err := s.persistOffset(ctx, deviceID, streamName, response.LastEventID); err != nil {
+			return SyncResponse{}, err
+		}
+	}
 
 	return response, nil
+}
+
+func (s *Service) resolveAfterEventID(ctx context.Context, deviceID uuid.UUID, streamName, afterEventID string) (string, error) {
+	if afterEventID != "" {
+		return afterEventID, nil
+	}
+
+	return s.repo.GetEventOffset(ctx, deviceID, streamName)
 }
 
 func (s *Service) resolveAfterSequence(ctx context.Context, afterEventID string) (int64, error) {
@@ -324,6 +374,19 @@ func (s *Service) resolveAfterSequence(ctx context.Context, afterEventID string)
 	}
 
 	return sequence, nil
+}
+
+func (s *Service) persistOffset(ctx context.Context, deviceID uuid.UUID, streamName, eventID string) error {
+	parsed, err := uuid.Parse(eventID)
+	if err != nil {
+		return fmt.Errorf("invalid event offset id: %w", err)
+	}
+
+	return s.repo.UpsertEventOffset(ctx, deviceID, streamName, parsed)
+}
+
+func channelSyncStreamName(channelID uuid.UUID) string {
+	return fmt.Sprintf("channel:%s", channelID.String())
 }
 
 func marshalEvent(event appws.WSEvent) ([]byte, error) {

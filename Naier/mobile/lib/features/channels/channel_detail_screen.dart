@@ -147,7 +147,7 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
 
     final createdAt = DateTime.now();
     final pendingMessage = ChatMessage(
-      id: 'pending-${createdAt.microsecondsSinceEpoch}',
+      id: result.clientEventId,
       channelId: widget.channelId,
       senderId: 'me',
       senderName: 'You',

@@ -1,4 +1,5 @@
 import type { Message } from "@/shared/types/message";
+import type { ReadState, ReactionEvent } from "@/shared/types/message";
 import type { PresenceStatus } from "@/shared/types/presence";
 import type { User } from "@/shared/types/user";
 
@@ -21,6 +22,7 @@ export type ServerEventType =
   | "MESSAGE_DELETED"
   | "TYPING"
   | "REACTION"
+  | "READ_STATE"
   | "PRESENCE"
   | "MEMBER_JOINED"
   | "MEMBER_LEFT"
@@ -34,8 +36,10 @@ export interface WSEvent<TPayload = unknown> {
 
 export interface SyncEventsResponse {
   events: Array<{
-    type: "MESSAGE_NEW" | "MESSAGE_UPDATED" | "MESSAGE_DELETED";
-    message: Message;
+    type: "MESSAGE_NEW" | "MESSAGE_UPDATED" | "MESSAGE_DELETED" | "REACTION" | "READ_STATE";
+    message?: Message;
+    reaction?: ReactionEvent;
+    read_state?: ReadState;
     event_id: string;
     sequence: number;
     channel_id: string;
@@ -56,10 +60,29 @@ export interface TypingPayload {
 }
 
 export interface ReactionPayload {
-  messageId: string;
+  messageId?: string;
+  message_id?: string;
+  channelId?: string;
+  channel_id?: string;
   emoji: string;
-  userId: string;
+  userId?: string;
+  user_id?: string;
   action: "add" | "remove";
+  event_id?: string;
+  sequence?: number;
+  created_at?: string;
+}
+
+export interface ReadStatePayload {
+  channelId?: string;
+  channel_id?: string;
+  userId?: string;
+  user_id?: string;
+  lastReadSequence?: number;
+  last_read_sequence?: number;
+  event_id?: string;
+  sequence?: number;
+  created_at?: string;
 }
 
 export interface PresencePayload {
@@ -87,6 +110,7 @@ export type ServerEventPayload =
   | MessageDeletedPayload
   | TypingPayload
   | ReactionPayload
+  | ReadStatePayload
   | PresencePayload
   | MemberJoinedPayload
   | MemberLeftPayload

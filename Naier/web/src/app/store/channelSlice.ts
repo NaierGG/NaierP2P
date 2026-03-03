@@ -7,6 +7,7 @@ export interface ChannelState {
   activeChannelId: string | null;
   unreadCounts: Record<string, number>;
   lastMessages: Record<string, Message>;
+  readStates: Record<string, Record<string, number>>;
 }
 
 const initialState: ChannelState = {
@@ -14,6 +15,7 @@ const initialState: ChannelState = {
   activeChannelId: null,
   unreadCounts: {},
   lastMessages: {},
+  readStates: {},
 };
 
 const channelSlice = createSlice({
@@ -56,6 +58,18 @@ const channelSlice = createSlice({
         };
       }
     },
+    setReadState(
+      state,
+      action: PayloadAction<{
+        channelId: string;
+        userId: string;
+        lastReadSequence: number;
+      }>
+    ) {
+      state.readStates[action.payload.channelId] ??= {};
+      state.readStates[action.payload.channelId][action.payload.userId] =
+        action.payload.lastReadSequence;
+    },
   },
 });
 
@@ -67,6 +81,7 @@ export const {
   incrementUnread,
   clearUnread,
   setLastMessage,
+  setReadState,
 } = channelSlice.actions;
 
 export default channelSlice.reducer;

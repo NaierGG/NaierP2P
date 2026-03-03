@@ -3,6 +3,26 @@ export interface Reaction {
   emoji: string;
 }
 
+export interface ReactionEvent {
+  message_id: string;
+  channel_id: string;
+  user_id: string;
+  emoji: string;
+  action: "add" | "remove";
+  event_id: string;
+  sequence: number;
+  created_at: string;
+}
+
+export interface ReadState {
+  channel_id: string;
+  user_id: string;
+  last_read_sequence: number;
+  event_id: string;
+  sequence: number;
+  created_at: string;
+}
+
 export interface Message {
   id: string;
   channel_id: string;
@@ -29,8 +49,10 @@ export interface PendingMessage extends Message {
 }
 
 export interface SyncEvent {
-  type: "MESSAGE_NEW" | "MESSAGE_UPDATED" | "MESSAGE_DELETED";
-  message: Message;
+  type: "MESSAGE_NEW" | "MESSAGE_UPDATED" | "MESSAGE_DELETED" | "REACTION" | "READ_STATE";
+  message?: Message;
+  reaction?: ReactionEvent;
+  read_state?: ReadState;
   event_id: string;
   sequence: number;
   channel_id: string;

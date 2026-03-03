@@ -23,12 +23,14 @@ class ComposerAttachment {
 class MessageInputResult {
   const MessageInputResult({
     required this.text,
+    required this.clientEventId,
     this.replyTo,
     this.editingMessage,
     this.attachment,
   });
 
   final String text;
+  final String clientEventId;
   final ChatMessage? replyTo;
   final ChatMessage? editingMessage;
   final ComposerAttachment? attachment;
@@ -258,6 +260,7 @@ class _MessageInputWidgetState extends State<MessageInputWidget> {
     widget.onSend?.call(
       MessageInputResult(
         text: text,
+        clientEventId: 'mobile-${DateTime.now().microsecondsSinceEpoch}',
         replyTo: widget.replyTo,
         editingMessage: widget.editingMessage,
         attachment: _attachment,

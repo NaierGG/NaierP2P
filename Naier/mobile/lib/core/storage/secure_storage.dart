@@ -8,6 +8,7 @@ class SecureStorageService {
 
   static const _identityKey = 'identity_keypair';
   static const _sessionKey = 'auth_session';
+  static const _syncStateKey = 'sync_state';
   static const _channelBox = 'channel_keys';
   static const _messageBox = 'message_cache';
 
@@ -55,6 +56,27 @@ class SecureStorageService {
 
   Future<void> clearSession() async {
     await _secureStorage.delete(key: _sessionKey);
+  }
+
+  Future<void> saveSyncCursor(String streamName, String eventId) async {
+    final existing = await getSyncState();
+    existing[streamName] = eventId;
+    await _secureStorage.write(key: _syncStateKey, value: jsonEncode(existing));
+  }
+
+  Future<String?> getSyncCursor(String streamName) async {
+    final state = await getSyncState();
+    return state[streamName];
+  }
+
+  Future<Map<String, String>> getSyncState() async {
+    final value = await _secureStorage.read(key: _syncStateKey);
+    if (value == null || value.isEmpty) {
+      return <String, String>{};
+    }
+
+    final decoded = jsonDecode(value) as Map<String, dynamic>;
+    return decoded.map((key, value) => MapEntry(key, value.toString()));
   }
 
   Future<void> saveChannelKey(String channelId, String key) async {

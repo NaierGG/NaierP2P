@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/models/session.dart';
 import '../storage/secure_storage.dart';
+import 'sync_client.dart';
+import 'websocket_client.dart';
 
 final storageProvider = Provider<SecureStorageService>((ref) {
   throw UnimplementedError('storageProvider must be overridden');
@@ -84,6 +86,35 @@ final dioProvider = Provider<Dio>((ref) {
   );
 
   return dio;
+});
+
+final wsBaseUrlProvider = Provider<String>((ref) {
+  final apiBaseUrl = ref.watch(dioProvider).options.baseUrl;
+  final baseUri = Uri.parse(apiBaseUrl);
+  final scheme = baseUri.scheme == 'https' ? 'wss' : 'ws';
+  final basePath = baseUri.path.replaceFirst(RegExp(r'/api/v1/?$'), '');
+  return baseUri
+      .replace(scheme: scheme, path: '$basePath/ws')
+      .toString();
+});
+
+final syncClientProvider = Provider<MeshSyncClient>((ref) {
+  return MeshSyncClient(
+    dio: ref.watch(dioProvider),
+    storage: ref.watch(storageProvider),
+  );
+});
+
+final websocketClientProvider = Provider<MeshWebSocketClient>((ref) {
+  final syncClient = ref.watch(syncClientProvider);
+  final client = MeshWebSocketClient(
+    getToken: () => ref.read(authSessionProvider).accessToken,
+    baseUrl: ref.watch(wsBaseUrlProvider),
+    onConnected: () => syncClient.syncEvents(),
+  );
+
+  ref.onDispose(client.dispose);
+  return client;
 });
 
 class AuthSessionController extends StateNotifier<AuthSession> {

@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AppDispatch } from "@/app/store";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
-import { incrementUnread, setLastMessage } from "@/app/store/channelSlice";
+import {
+  incrementUnread,
+  setLastMessage,
+  setReadState,
+} from "@/app/store/channelSlice";
 import {
   addMessage,
   applyReaction,
@@ -23,6 +27,7 @@ import type {
   Message,
   MessageDeletedPayload,
   PresencePayload,
+  ReadStatePayload,
   ReactionPayload,
   SyncEventsResponse,
   TypingPayload,
@@ -105,10 +110,14 @@ export function useWebSocket() {
         }
 
         for (const event of response.data.events) {
+          const payload = event.message ?? event.reaction ?? event.read_state;
+          if (!payload) {
+            continue;
+          }
           routeEvent(
             {
               type: event.type,
-              payload: event.message,
+              payload,
             },
             {
               activeChannelId: activeChannelIdRef.current,
@@ -116,9 +125,10 @@ export function useWebSocket() {
               dispatch,
             }
           );
-          if (event.event_id) {
-            dispatch(setLastServerEventId(event.event_id));
-          }
+        }
+
+        if (response.data.last_event_id) {
+          dispatch(setLastServerEventId(response.data.last_event_id));
         }
       } catch (error) {
         console.error("sync catch-up failed", error);
@@ -257,14 +267,37 @@ function routeEvent(
     }
     case "REACTION": {
       const payload = event.payload as ReactionPayload;
+      if (payload.event_id) {
+        context.dispatch(setLastServerEventId(payload.event_id));
+      }
       context.dispatch(
         applyReaction({
-          messageId: payload.messageId,
+          messageId: payload.message_id ?? payload.messageId ?? "",
           emoji: payload.emoji,
-          userId: payload.userId,
+          userId: payload.user_id ?? payload.userId ?? "",
           action: payload.action,
         })
       );
+      break;
+    }
+    case "READ_STATE": {
+      const payload = event.payload as ReadStatePayload;
+      if (payload.event_id) {
+        context.dispatch(setLastServerEventId(payload.event_id));
+      }
+      const channelId = payload.channel_id ?? payload.channelId;
+      const userId = payload.user_id ?? payload.userId;
+      const lastReadSequence =
+        payload.last_read_sequence ?? payload.lastReadSequence ?? 0;
+      if (channelId && userId) {
+        context.dispatch(
+          setReadState({
+            channelId,
+            userId,
+            lastReadSequence,
+          })
+        );
+      }
       break;
     }
     case "PRESENCE": {

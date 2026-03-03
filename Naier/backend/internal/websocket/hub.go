@@ -273,4 +273,3 @@ func (h *Hub) subscribeRedis(ctx context.Context) {
 func (h *Hub) redisChannel(channelID uuid.UUID) string {
 	return fmt.Sprintf("ws:channel:%s", channelID.String())
 }
-

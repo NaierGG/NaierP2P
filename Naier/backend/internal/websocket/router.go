@@ -7,8 +7,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	gorillaws "github.com/gorilla/websocket"
 	"github.com/google/uuid"
+	gorillaws "github.com/gorilla/websocket"
 	"github.com/naier/backend/internal/auth"
 )
 
@@ -18,8 +18,8 @@ type MessageService interface {
 	Delete(ctx context.Context, userID, messageID uuid.UUID) (channelID uuid.UUID, event []byte, err error)
 	AddReaction(ctx context.Context, userID, messageID uuid.UUID, emoji string) (channelID uuid.UUID, event []byte, err error)
 	RemoveReaction(ctx context.Context, userID, messageID uuid.UUID, emoji string) (channelID uuid.UUID, event []byte, err error)
-	MarkRead(ctx context.Context, userID, channelID, messageID uuid.UUID) error
-	MarkReadSequence(ctx context.Context, userID, channelID uuid.UUID, lastReadSequence int64) error
+	MarkRead(ctx context.Context, userID, channelID, messageID uuid.UUID) ([]byte, error)
+	MarkReadSequence(ctx context.Context, userID, channelID uuid.UUID, lastReadSequence int64) ([]byte, error)
 }
 
 type PresenceService interface {
@@ -225,7 +225,9 @@ func (r *Router) handleMessageSend(client *Client, event WSEvent) {
 		return
 	}
 
-	r.hub.BroadcastToChannel(channelID, responseEvent, uuid.Nil)
+	if responseEvent != nil {
+		r.hub.BroadcastToChannel(channelID, responseEvent, uuid.Nil)
+	}
 }
 
 func (r *Router) handleMessageEdit(client *Client, event WSEvent) {
@@ -252,7 +254,9 @@ func (r *Router) handleMessageEdit(client *Client, event WSEvent) {
 		return
 	}
 
-	r.hub.BroadcastToChannel(channelID, responseEvent, uuid.Nil)
+	if responseEvent != nil {
+		r.hub.BroadcastToChannel(channelID, responseEvent, uuid.Nil)
+	}
 }
 
 func (r *Router) handleMessageDelete(client *Client, event WSEvent) {
@@ -417,8 +421,13 @@ func (r *Router) handleReadAck(client *Client, event WSEvent) {
 	}
 
 	if payload.LastReadSequence > 0 {
-		if err := r.messageService.MarkReadSequence(context.Background(), client.UserID, channelID, payload.LastReadSequence); err != nil {
+		responseEvent, err := r.messageService.MarkReadSequence(context.Background(), client.UserID, channelID, payload.LastReadSequence)
+		if err != nil {
 			r.sendError(client, event.RequestID, "read_ack_failed", err.Error())
+			return
+		}
+		if responseEvent != nil {
+			r.hub.BroadcastToChannel(channelID, responseEvent, uuid.Nil)
 		}
 		return
 	}
@@ -429,8 +438,13 @@ func (r *Router) handleReadAck(client *Client, event WSEvent) {
 		return
 	}
 
-	if err := r.messageService.MarkRead(context.Background(), client.UserID, channelID, messageID); err != nil {
+	responseEvent, err := r.messageService.MarkRead(context.Background(), client.UserID, channelID, messageID)
+	if err != nil {
 		r.sendError(client, event.RequestID, "read_ack_failed", err.Error())
+		return
+	}
+	if responseEvent != nil {
+		r.hub.BroadcastToChannel(channelID, responseEvent, uuid.Nil)
 	}
 }
 

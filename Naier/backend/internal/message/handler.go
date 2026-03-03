@@ -35,6 +35,11 @@ func (h *Handler) syncEvents(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
+	deviceID, err := auth.DeviceIDFromContext(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
 
 	limit := 100
 	if raw := c.Query("limit"); raw != "" {
@@ -46,7 +51,7 @@ func (h *Handler) syncEvents(c *gin.Context) {
 		limit = parsed
 	}
 
-	response, err := h.service.SyncEvents(c.Request.Context(), userID, c.Query("after"), limit)
+	response, err := h.service.SyncEvents(c.Request.Context(), userID, deviceID, c.Query("after"), limit)
 	if err != nil {
 		h.respondError(c, err)
 		return
@@ -93,6 +98,11 @@ func (h *Handler) syncChannel(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
+	deviceID, err := auth.DeviceIDFromContext(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
 
 	channelID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -110,7 +120,7 @@ func (h *Handler) syncChannel(c *gin.Context) {
 		limit = parsed
 	}
 
-	response, err := h.service.SyncChannelEvents(c.Request.Context(), userID, channelID, c.Query("after"), limit)
+	response, err := h.service.SyncChannelEvents(c.Request.Context(), userID, deviceID, channelID, c.Query("after"), limit)
 	if err != nil {
 		h.respondError(c, err)
 		return

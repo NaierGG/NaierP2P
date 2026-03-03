@@ -22,6 +22,7 @@ const (
 	EventMemberJoined   = "MEMBER_JOINED"
 	EventMemberLeft     = "MEMBER_LEFT"
 	EventReadAck        = "READ_ACK"
+	EventReadState      = "READ_STATE"
 	EventError          = "ERROR"
 )
 
@@ -35,4 +36,3 @@ type ErrorPayload struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
 }
-

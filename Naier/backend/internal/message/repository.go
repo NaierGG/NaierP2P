@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,6 +32,26 @@ type messageRecord struct {
 	Sequence      int64
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+}
+
+type reactionEventRecord struct {
+	EventID   uuid.UUID
+	Sequence  int64
+	MessageID uuid.UUID
+	ChannelID uuid.UUID
+	UserID    uuid.UUID
+	Emoji     string
+	Action    string
+	CreatedAt time.Time
+}
+
+type readEventRecord struct {
+	EventID          uuid.UUID
+	Sequence         int64
+	ChannelID        uuid.UUID
+	UserID           uuid.UUID
+	LastReadSequence int64
+	CreatedAt        time.Time
 }
 
 func NewRepository(db *pgxpool.Pool) *Repository {
@@ -165,7 +186,7 @@ func (r *Repository) Update(ctx context.Context, messageID uuid.UUID, content, i
 		UPDATE messages
 		SET content = $2, iv = $3, is_edited = TRUE, updated_at = NOW(),
 		    server_event_id = gen_random_uuid(),
-		    sequence = nextval(pg_get_serial_sequence('messages', 'sequence'))
+		    sequence = nextval('sync_event_sequence')
 		WHERE id = $1
 		RETURNING id, channel_id, sender_id, type, content, COALESCE(iv, ''),
 		          COALESCE(reply_to_id::text, ''), is_edited, is_deleted,
@@ -201,7 +222,7 @@ func (r *Repository) SoftDelete(ctx context.Context, messageID uuid.UUID) (Messa
 		UPDATE messages
 		SET content = '', iv = '', is_deleted = TRUE, updated_at = NOW(),
 		    server_event_id = gen_random_uuid(),
-		    sequence = nextval(pg_get_serial_sequence('messages', 'sequence'))
+		    sequence = nextval('sync_event_sequence')
 		WHERE id = $1
 		RETURNING id, channel_id, sender_id, type, content, COALESCE(iv, ''),
 		          COALESCE(reply_to_id::text, ''), is_edited, is_deleted,
@@ -244,26 +265,120 @@ func (r *Repository) GetMessageMeta(ctx context.Context, messageID uuid.UUID) (c
 	return channelID, senderID, nil
 }
 
-func (r *Repository) AddReaction(ctx context.Context, messageID, userID uuid.UUID, emoji string) error {
-	_, err := r.db.Exec(ctx, `
+func (r *Repository) GetMessageSequence(ctx context.Context, messageID uuid.UUID) (int64, error) {
+	var sequence int64
+	err := r.db.QueryRow(ctx, `SELECT sequence FROM messages WHERE id = $1`, messageID).Scan(&sequence)
+	if err != nil {
+		return 0, fmt.Errorf("get message sequence: %w", err)
+	}
+
+	return sequence, nil
+}
+
+func (r *Repository) AddReaction(ctx context.Context, messageID, userID uuid.UUID, emoji string) (*ReactionEventDTO, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin add reaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var channelID uuid.UUID
+	err = tx.QueryRow(ctx, `SELECT channel_id FROM messages WHERE id = $1`, messageID).Scan(&channelID)
+	if err != nil {
+		return nil, fmt.Errorf("get reaction channel: %w", err)
+	}
+
+	result, err := tx.Exec(ctx, `
 		INSERT INTO reactions (message_id, user_id, emoji)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (message_id, user_id, emoji) DO NOTHING
 	`, messageID, userID, emoji)
 	if err != nil {
-		return fmt.Errorf("add reaction: %w", err)
+		return nil, fmt.Errorf("add reaction: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, fmt.Errorf("commit noop reaction add: %w", err)
+		}
+		return nil, nil
 	}
 
-	return nil
+	var record reactionEventRecord
+	err = tx.QueryRow(ctx, `
+		INSERT INTO reaction_events (message_id, channel_id, user_id, emoji, action)
+		VALUES ($1, $2, $3, $4, 'add')
+		RETURNING event_id, sequence, message_id, channel_id, user_id, emoji, action, created_at
+	`, messageID, channelID, userID, emoji).Scan(
+		&record.EventID,
+		&record.Sequence,
+		&record.MessageID,
+		&record.ChannelID,
+		&record.UserID,
+		&record.Emoji,
+		&record.Action,
+		&record.CreatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("insert reaction event: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit add reaction: %w", err)
+	}
+
+	dto := reactionEventDTO(record)
+	return &dto, nil
 }
 
-func (r *Repository) RemoveReaction(ctx context.Context, messageID, userID uuid.UUID, emoji string) error {
-	_, err := r.db.Exec(ctx, `DELETE FROM reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3`, messageID, userID, emoji)
+func (r *Repository) RemoveReaction(ctx context.Context, messageID, userID uuid.UUID, emoji string) (*ReactionEventDTO, error) {
+	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("remove reaction: %w", err)
+		return nil, fmt.Errorf("begin remove reaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var channelID uuid.UUID
+	err = tx.QueryRow(ctx, `SELECT channel_id FROM messages WHERE id = $1`, messageID).Scan(&channelID)
+	if err != nil {
+		return nil, fmt.Errorf("get reaction channel: %w", err)
 	}
 
-	return nil
+	result, err := tx.Exec(ctx, `DELETE FROM reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3`, messageID, userID, emoji)
+	if err != nil {
+		return nil, fmt.Errorf("remove reaction: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, fmt.Errorf("commit noop reaction remove: %w", err)
+		}
+		return nil, nil
+	}
+
+	var record reactionEventRecord
+	err = tx.QueryRow(ctx, `
+		INSERT INTO reaction_events (message_id, channel_id, user_id, emoji, action)
+		VALUES ($1, $2, $3, $4, 'remove')
+		RETURNING event_id, sequence, message_id, channel_id, user_id, emoji, action, created_at
+	`, messageID, channelID, userID, emoji).Scan(
+		&record.EventID,
+		&record.Sequence,
+		&record.MessageID,
+		&record.ChannelID,
+		&record.UserID,
+		&record.Emoji,
+		&record.Action,
+		&record.CreatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("insert reaction event: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit remove reaction: %w", err)
+	}
+
+	dto := reactionEventDTO(record)
+	return &dto, nil
 }
 
 func (r *Repository) BulkGetAfter(ctx context.Context, channelID uuid.UUID, afterTime time.Time) ([]MessageDTO, error) {
@@ -310,18 +425,56 @@ func (r *Repository) MarkRead(ctx context.Context, channelID, userID uuid.UUID) 
 	return nil
 }
 
-func (r *Repository) MarkReadSequence(ctx context.Context, channelID, userID uuid.UUID, lastReadSequence int64) error {
-	_, err := r.db.Exec(ctx, `
+func (r *Repository) MarkReadSequence(ctx context.Context, channelID, userID uuid.UUID, lastReadSequence int64) (*ReadStateDTO, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin mark read sequence: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var updatedSequence int64
+	err = tx.QueryRow(ctx, `
 		UPDATE channel_members
 		SET last_read_at = NOW(),
 		    last_read_sequence = GREATEST(last_read_sequence, $3)
-		WHERE channel_id = $1 AND user_id = $2
-	`, channelID, userID, lastReadSequence)
+		WHERE channel_id = $1
+		  AND user_id = $2
+		  AND last_read_sequence < $3
+		RETURNING last_read_sequence
+	`, channelID, userID, lastReadSequence).Scan(&updatedSequence)
+	if errors.Is(err, pgx.ErrNoRows) {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, fmt.Errorf("commit noop read state: %w", err)
+		}
+		return nil, nil
+	}
 	if err != nil {
-		return fmt.Errorf("mark read sequence: %w", err)
+		return nil, fmt.Errorf("mark read sequence: %w", err)
 	}
 
-	return nil
+	var record readEventRecord
+	err = tx.QueryRow(ctx, `
+		INSERT INTO read_events (channel_id, user_id, last_read_sequence)
+		VALUES ($1, $2, $3)
+		RETURNING event_id, sequence, channel_id, user_id, last_read_sequence, created_at
+	`, channelID, userID, updatedSequence).Scan(
+		&record.EventID,
+		&record.Sequence,
+		&record.ChannelID,
+		&record.UserID,
+		&record.LastReadSequence,
+		&record.CreatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("insert read event: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit mark read sequence: %w", err)
+	}
+
+	dto := readEventDTO(record)
+	return &dto, nil
 }
 
 func (r *Repository) GetBySenderClientEventID(ctx context.Context, senderID uuid.UUID, clientEventID string) (MessageDTO, error) {
@@ -359,7 +512,17 @@ func (r *Repository) GetBySenderClientEventID(ctx context.Context, senderID uuid
 
 func (r *Repository) GetEventSequence(ctx context.Context, serverEventID uuid.UUID) (int64, error) {
 	var sequence int64
-	err := r.db.QueryRow(ctx, `SELECT sequence FROM messages WHERE server_event_id = $1`, serverEventID).Scan(&sequence)
+	err := r.db.QueryRow(ctx, `
+		SELECT sequence
+		FROM (
+			SELECT sequence FROM messages WHERE server_event_id = $1
+			UNION ALL
+			SELECT sequence FROM reaction_events WHERE event_id = $1
+			UNION ALL
+			SELECT sequence FROM read_events WHERE event_id = $1
+		) events
+		LIMIT 1
+	`, serverEventID).Scan(&sequence)
 	if err != nil {
 		return 0, fmt.Errorf("get event sequence: %w", err)
 	}
@@ -367,64 +530,54 @@ func (r *Repository) GetEventSequence(ctx context.Context, serverEventID uuid.UU
 	return sequence, nil
 }
 
-func (r *Repository) GetEventsAfter(ctx context.Context, userID uuid.UUID, afterSequence int64, limit int) ([]SyncEvent, bool, error) {
-	if limit <= 0 {
-		limit = 100
+func (r *Repository) GetEventOffset(ctx context.Context, deviceID uuid.UUID, streamName string) (string, error) {
+	var eventID uuid.UUID
+	err := r.db.QueryRow(ctx, `
+		SELECT last_event_id
+		FROM event_offsets
+		WHERE device_id = $1 AND stream_name = $2
+	`, deviceID, streamName).Scan(&eventID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
 	}
-	if limit > 500 {
-		limit = 500
-	}
-
-	rows, err := r.db.Query(ctx, `
-		SELECT m.id, m.channel_id, m.sender_id, m.type, m.content, COALESCE(m.iv, ''),
-		       COALESCE(m.reply_to_id::text, ''), m.is_edited, m.is_deleted,
-		       COALESCE(m.signature, ''), COALESCE(m.client_event_id, ''),
-		       m.server_event_id, m.sequence, m.created_at, m.updated_at
-		FROM messages m
-		INNER JOIN channel_members cm ON cm.channel_id = m.channel_id
-		WHERE cm.user_id = $1
-		  AND m.sequence > $2
-		ORDER BY m.sequence ASC
-		LIMIT $3
-	`, userID, afterSequence, limit+1)
 	if err != nil {
-		return nil, false, fmt.Errorf("get sync events: %w", err)
+		return "", fmt.Errorf("get event offset: %w", err)
 	}
-	defer rows.Close()
 
-	records := make([]messageRecord, 0, limit+1)
-	for rows.Next() {
-		record, scanErr := scanMessage(rows)
-		if scanErr != nil {
-			return nil, false, scanErr
-		}
-		records = append(records, record)
+	return eventID.String(), nil
+}
+
+func (r *Repository) UpsertEventOffset(ctx context.Context, deviceID uuid.UUID, streamName string, lastEventID uuid.UUID) error {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO event_offsets (device_id, stream_name, last_event_id, updated_at)
+		VALUES ($1, $2, $3, NOW())
+		ON CONFLICT (device_id, stream_name)
+		DO UPDATE SET last_event_id = EXCLUDED.last_event_id, updated_at = NOW()
+	`, deviceID, streamName, lastEventID)
+	if err != nil {
+		return fmt.Errorf("upsert event offset: %w", err)
 	}
-	if err := rows.Err(); err != nil {
+
+	return nil
+}
+
+func (r *Repository) GetEventsAfter(ctx context.Context, userID uuid.UUID, afterSequence int64, limit int) ([]SyncEvent, bool, error) {
+	messageRecords, err := r.getMessageEventsAfter(ctx, userID, afterSequence, limit)
+	if err != nil {
 		return nil, false, err
 	}
 
-	hasMore := len(records) > limit
-	if hasMore {
-		records = records[:limit]
+	reactionRecords, err := r.getReactionEventsAfter(ctx, userID, afterSequence, limit)
+	if err != nil {
+		return nil, false, err
 	}
 
-	events := make([]SyncEvent, 0, len(records))
-	for _, record := range records {
-		messageDTO, convErr := r.toMessageDTO(ctx, record)
-		if convErr != nil {
-			return nil, false, convErr
-		}
-		events = append(events, SyncEvent{
-			Type:      inferSyncEventType(record),
-			Message:   messageDTO,
-			EventID:   record.ServerEventID.String(),
-			Sequence:  record.Sequence,
-			ChannelID: record.ChannelID.String(),
-		})
+	readRecords, err := r.getReadEventsAfter(ctx, userID, afterSequence, limit)
+	if err != nil {
+		return nil, false, err
 	}
 
-	return events, hasMore, nil
+	return r.buildSyncEvents(ctx, messageRecords, reactionRecords, readRecords, limit)
 }
 
 func (r *Repository) GetChannelEventsAfter(ctx context.Context, channelID, userID uuid.UUID, afterSequence int64, limit int) ([]SyncEvent, bool, error) {
@@ -436,62 +589,22 @@ func (r *Repository) GetChannelEventsAfter(ctx context.Context, channelID, userI
 		return nil, false, pgx.ErrNoRows
 	}
 
-	if limit <= 0 {
-		limit = 100
-	}
-	if limit > 500 {
-		limit = 500
-	}
-
-	rows, err := r.db.Query(ctx, `
-		SELECT id, channel_id, sender_id, type, content, COALESCE(iv, ''),
-		       COALESCE(reply_to_id::text, ''), is_edited, is_deleted,
-		       COALESCE(signature, ''), COALESCE(client_event_id, ''),
-		       server_event_id, sequence, created_at, updated_at
-		FROM messages
-		WHERE channel_id = $1
-		  AND sequence > $2
-		ORDER BY sequence ASC
-		LIMIT $3
-	`, channelID, afterSequence, limit+1)
+	messageRecords, err := r.getChannelMessageEventsAfter(ctx, channelID, afterSequence, limit)
 	if err != nil {
-		return nil, false, fmt.Errorf("get channel sync events: %w", err)
-	}
-	defer rows.Close()
-
-	records := make([]messageRecord, 0, limit+1)
-	for rows.Next() {
-		record, scanErr := scanMessage(rows)
-		if scanErr != nil {
-			return nil, false, scanErr
-		}
-		records = append(records, record)
-	}
-	if err := rows.Err(); err != nil {
 		return nil, false, err
 	}
 
-	hasMore := len(records) > limit
-	if hasMore {
-		records = records[:limit]
+	reactionRecords, err := r.getChannelReactionEventsAfter(ctx, channelID, afterSequence, limit)
+	if err != nil {
+		return nil, false, err
 	}
 
-	events := make([]SyncEvent, 0, len(records))
-	for _, record := range records {
-		messageDTO, convErr := r.toMessageDTO(ctx, record)
-		if convErr != nil {
-			return nil, false, convErr
-		}
-		events = append(events, SyncEvent{
-			Type:      inferSyncEventType(record),
-			Message:   messageDTO,
-			EventID:   record.ServerEventID.String(),
-			Sequence:  record.Sequence,
-			ChannelID: record.ChannelID.String(),
-		})
+	readRecords, err := r.getChannelReadEventsAfter(ctx, channelID, afterSequence, limit)
+	if err != nil {
+		return nil, false, err
 	}
 
-	return events, hasMore, nil
+	return r.buildSyncEvents(ctx, messageRecords, reactionRecords, readRecords, limit)
 }
 
 func (r *Repository) GetReactions(ctx context.Context, messageID uuid.UUID) ([]ReactionDTO, error) {
@@ -542,6 +655,234 @@ func (r *Repository) toMessageDTO(ctx context.Context, record messageRecord) (Me
 		UpdatedAt:     record.UpdatedAt,
 		Reactions:     reactions,
 	}, nil
+}
+
+func (r *Repository) getMessageEventsAfter(ctx context.Context, userID uuid.UUID, afterSequence int64, limit int) ([]messageRecord, error) {
+	return r.queryMessageRecords(ctx, `
+		SELECT m.id, m.channel_id, m.sender_id, m.type, m.content, COALESCE(m.iv, ''),
+		       COALESCE(m.reply_to_id::text, ''), m.is_edited, m.is_deleted,
+		       COALESCE(m.signature, ''), COALESCE(m.client_event_id, ''),
+		       m.server_event_id, m.sequence, m.created_at, m.updated_at
+		FROM messages m
+		INNER JOIN channel_members cm ON cm.channel_id = m.channel_id
+		WHERE cm.user_id = $1
+		  AND m.sequence > $2
+		ORDER BY m.sequence ASC
+		LIMIT $3
+	`, userID, afterSequence, limit+1)
+}
+
+func (r *Repository) getChannelMessageEventsAfter(ctx context.Context, channelID uuid.UUID, afterSequence int64, limit int) ([]messageRecord, error) {
+	return r.queryMessageRecords(ctx, `
+		SELECT id, channel_id, sender_id, type, content, COALESCE(iv, ''),
+		       COALESCE(reply_to_id::text, ''), is_edited, is_deleted,
+		       COALESCE(signature, ''), COALESCE(client_event_id, ''),
+		       server_event_id, sequence, created_at, updated_at
+		FROM messages
+		WHERE channel_id = $1
+		  AND sequence > $2
+		ORDER BY sequence ASC
+		LIMIT $3
+	`, channelID, afterSequence, limit+1)
+}
+
+func (r *Repository) getReactionEventsAfter(ctx context.Context, userID uuid.UUID, afterSequence int64, limit int) ([]reactionEventRecord, error) {
+	return r.queryReactionRecords(ctx, `
+		SELECT re.event_id, re.sequence, re.message_id, re.channel_id, re.user_id, re.emoji, re.action, re.created_at
+		FROM reaction_events re
+		INNER JOIN channel_members cm ON cm.channel_id = re.channel_id
+		WHERE cm.user_id = $1
+		  AND re.sequence > $2
+		ORDER BY re.sequence ASC
+		LIMIT $3
+	`, userID, afterSequence, limit+1)
+}
+
+func (r *Repository) getChannelReactionEventsAfter(ctx context.Context, channelID uuid.UUID, afterSequence int64, limit int) ([]reactionEventRecord, error) {
+	return r.queryReactionRecords(ctx, `
+		SELECT event_id, sequence, message_id, channel_id, user_id, emoji, action, created_at
+		FROM reaction_events
+		WHERE channel_id = $1
+		  AND sequence > $2
+		ORDER BY sequence ASC
+		LIMIT $3
+	`, channelID, afterSequence, limit+1)
+}
+
+func (r *Repository) getReadEventsAfter(ctx context.Context, userID uuid.UUID, afterSequence int64, limit int) ([]readEventRecord, error) {
+	return r.queryReadRecords(ctx, `
+		SELECT re.event_id, re.sequence, re.channel_id, re.user_id, re.last_read_sequence, re.created_at
+		FROM read_events re
+		INNER JOIN channel_members cm ON cm.channel_id = re.channel_id
+		WHERE cm.user_id = $1
+		  AND re.sequence > $2
+		ORDER BY re.sequence ASC
+		LIMIT $3
+	`, userID, afterSequence, limit+1)
+}
+
+func (r *Repository) getChannelReadEventsAfter(ctx context.Context, channelID uuid.UUID, afterSequence int64, limit int) ([]readEventRecord, error) {
+	return r.queryReadRecords(ctx, `
+		SELECT event_id, sequence, channel_id, user_id, last_read_sequence, created_at
+		FROM read_events
+		WHERE channel_id = $1
+		  AND sequence > $2
+		ORDER BY sequence ASC
+		LIMIT $3
+	`, channelID, afterSequence, limit+1)
+}
+
+func (r *Repository) queryMessageRecords(ctx context.Context, sql string, args ...any) ([]messageRecord, error) {
+	rows, err := r.db.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query message sync records: %w", err)
+	}
+	defer rows.Close()
+
+	records := make([]messageRecord, 0)
+	for rows.Next() {
+		record, scanErr := scanMessage(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		records = append(records, record)
+	}
+
+	return records, rows.Err()
+}
+
+func (r *Repository) queryReactionRecords(ctx context.Context, sql string, args ...any) ([]reactionEventRecord, error) {
+	rows, err := r.db.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query reaction sync records: %w", err)
+	}
+	defer rows.Close()
+
+	records := make([]reactionEventRecord, 0)
+	for rows.Next() {
+		var record reactionEventRecord
+		if err := rows.Scan(
+			&record.EventID,
+			&record.Sequence,
+			&record.MessageID,
+			&record.ChannelID,
+			&record.UserID,
+			&record.Emoji,
+			&record.Action,
+			&record.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan reaction event: %w", err)
+		}
+		records = append(records, record)
+	}
+
+	return records, rows.Err()
+}
+
+func (r *Repository) queryReadRecords(ctx context.Context, sql string, args ...any) ([]readEventRecord, error) {
+	rows, err := r.db.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query read sync records: %w", err)
+	}
+	defer rows.Close()
+
+	records := make([]readEventRecord, 0)
+	for rows.Next() {
+		var record readEventRecord
+		if err := rows.Scan(
+			&record.EventID,
+			&record.Sequence,
+			&record.ChannelID,
+			&record.UserID,
+			&record.LastReadSequence,
+			&record.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan read event: %w", err)
+		}
+		records = append(records, record)
+	}
+
+	return records, rows.Err()
+}
+
+func (r *Repository) buildSyncEvents(ctx context.Context, messageRecords []messageRecord, reactionRecords []reactionEventRecord, readRecords []readEventRecord, limit int) ([]SyncEvent, bool, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+
+	events := make([]SyncEvent, 0, len(messageRecords)+len(reactionRecords)+len(readRecords))
+	for _, record := range messageRecords {
+		messageDTO, err := r.toMessageDTO(ctx, record)
+		if err != nil {
+			return nil, false, err
+		}
+		dto := messageDTO
+		events = append(events, SyncEvent{
+			Type:      inferSyncEventType(record),
+			Message:   &dto,
+			EventID:   record.ServerEventID.String(),
+			Sequence:  record.Sequence,
+			ChannelID: record.ChannelID.String(),
+		})
+	}
+	for _, record := range reactionRecords {
+		dto := reactionEventDTO(record)
+		events = append(events, SyncEvent{
+			Type:      "REACTION",
+			Reaction:  &dto,
+			EventID:   record.EventID.String(),
+			Sequence:  record.Sequence,
+			ChannelID: record.ChannelID.String(),
+		})
+	}
+	for _, record := range readRecords {
+		dto := readEventDTO(record)
+		events = append(events, SyncEvent{
+			Type:      "READ_STATE",
+			ReadState: &dto,
+			EventID:   record.EventID.String(),
+			Sequence:  record.Sequence,
+			ChannelID: record.ChannelID.String(),
+		})
+	}
+
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].Sequence < events[j].Sequence
+	})
+
+	hasMore := len(events) > limit
+	if hasMore {
+		events = events[:limit]
+	}
+
+	return events, hasMore, nil
+}
+
+func reactionEventDTO(record reactionEventRecord) ReactionEventDTO {
+	return ReactionEventDTO{
+		MessageID: record.MessageID.String(),
+		ChannelID: record.ChannelID.String(),
+		UserID:    record.UserID.String(),
+		Emoji:     record.Emoji,
+		Action:    record.Action,
+		EventID:   record.EventID.String(),
+		Sequence:  record.Sequence,
+		CreatedAt: record.CreatedAt,
+	}
+}
+
+func readEventDTO(record readEventRecord) ReadStateDTO {
+	return ReadStateDTO{
+		ChannelID:        record.ChannelID.String(),
+		UserID:           record.UserID.String(),
+		LastReadSequence: record.LastReadSequence,
+		EventID:          record.EventID.String(),
+		Sequence:         record.Sequence,
+		CreatedAt:        record.CreatedAt,
+	}
 }
 
 func scanMessage(row pgx.Row) (messageRecord, error) {
