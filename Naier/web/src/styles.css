@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 20% 7%;
+    --foreground: 36 30% 93%;
+    --card: 220 18% 9%;
+    --card-foreground: 36 30% 93%;
+    --popover: 220 18% 9%;
+    --popover-foreground: 36 30% 93%;
+    --primary: 28 90% 58%;
+    --primary-foreground: 28 30% 10%;
+    --secondary: 220 14% 16%;
+    --secondary-foreground: 220 14% 86%;
+    --muted: 220 14% 16%;
+    --muted-foreground: 220 14% 70%;
+    --accent: 220 14% 18%;
+    --accent-foreground: 36 30% 93%;
+    --destructive: 0 72% 65%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 14% 18%;
+    --input: 220 14% 18%;
+    --ring: 28 90% 58%;
+    --radius: 0.75rem;
+    --sidebar: 220 20% 5%;
+    --sidebar-foreground: 36 30% 93%;
+    --sidebar-border: 220 14% 14%;
+    --bubble: 220 14% 13%;
+    --bubble-own: 28 40% 18%;
+  }
+
+  [data-theme="light"] {
+    --background: 216 28% 95%;
+    --foreground: 220 25% 16%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 16%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 16%;
+    --primary: 28 90% 52%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 216 20% 92%;
+    --secondary-foreground: 220 25% 24%;
+    --muted: 216 20% 92%;
+    --muted-foreground: 220 14% 40%;
+    --accent: 216 20% 94%;
+    --accent-foreground: 220 25% 16%;
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 216 20% 88%;
+    --input: 216 20% 88%;
+    --ring: 28 90% 52%;
+    --radius: 0.75rem;
+    --sidebar: 216 28% 97%;
+    --sidebar-foreground: 220 25% 16%;
+    --sidebar-border: 216 20% 90%;
+    --bubble: 216 20% 94%;
+    --bubble-own: 28 60% 94%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+}
+
+/* typing dots animation */
+@layer utilities {
+  .typing-dot {
+    @apply w-1.5 h-1.5 rounded-full bg-current animate-typing-bounce;
+  }
+  .typing-dot:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+  .typing-dot:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+}
