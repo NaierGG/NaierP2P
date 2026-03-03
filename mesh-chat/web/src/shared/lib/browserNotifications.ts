@@ -1,7 +1,11 @@
+import { router } from "@/app/router";
+import { store } from "@/app/store";
+import { setActiveChannel } from "@/app/store/channelSlice";
 import { loadSettings } from "@/features/settings/settingsStorage";
 import type { Message } from "@/shared/types";
 
 let audioContext: AudioContext | null = null;
+const pendingChannelStorageKey = "meshchat.pending_channel";
 
 export async function ensureDesktopNotificationPermission(enabled: boolean) {
   if (!enabled || typeof window === "undefined" || !("Notification" in window)) {
@@ -76,6 +80,35 @@ export async function notifyIncomingMessage(message: Message) {
       body,
       tag: `message-${message.id}`,
     });
+    notification.onclick = () => {
+      openChannelFromNotification(message.channel_id);
+      notification.close();
+    };
     window.setTimeout(() => notification.close(), 5000);
   }
+}
+
+export function openChannelFromNotification(channelId: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.sessionStorage.setItem(pendingChannelStorageKey, channelId);
+  store.dispatch(setActiveChannel(channelId));
+  void router.navigate("/app");
+  void window.focus();
+}
+
+export function consumePendingNotificationChannel() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const value = window.sessionStorage.getItem(pendingChannelStorageKey);
+  if (!value) {
+    return null;
+  }
+
+  window.sessionStorage.removeItem(pendingChannelStorageKey);
+  return value;
 }

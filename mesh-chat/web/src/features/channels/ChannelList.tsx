@@ -8,6 +8,7 @@ import MessageInput from "@/features/messages/MessageInput";
 import MessageList from "@/features/messages/MessageList";
 import { api } from "@/shared/lib/api";
 import { useWebSocket } from "@/shared/hooks/useWebSocket";
+import { consumePendingNotificationChannel } from "@/shared/lib/browserNotifications";
 import { isLikelyNetworkError, mockListChannels } from "@/shared/lib/mockApi";
 import { useSettings } from "@/features/settings/useSettings";
 import type { Channel } from "@/shared/types";
@@ -30,6 +31,7 @@ export default function ChannelList() {
     [activeChannelId, channels]
   );
   const joinedChannelsRef = useRef<Set<string>>(new Set());
+  const pendingNotificationChannelRef = useRef<string | null>(consumePendingNotificationChannel());
 
   const channelList = useMemo(
     () =>
@@ -53,7 +55,14 @@ export default function ChannelList() {
         }
 
         dispatch(setChannels(response.data.channels));
-        if (!activeChannelId && response.data.channels.length > 0) {
+        const pendingChannelId = pendingNotificationChannelRef.current;
+        if (
+          pendingChannelId &&
+          response.data.channels.some((channel) => channel.id === pendingChannelId)
+        ) {
+          dispatch(setActiveChannel(pendingChannelId));
+          pendingNotificationChannelRef.current = null;
+        } else if (!activeChannelId && response.data.channels.length > 0) {
           dispatch(setActiveChannel(response.data.channels[0].id));
         }
       } catch (error) {
@@ -67,7 +76,14 @@ export default function ChannelList() {
         }
 
         dispatch(setChannels(response.channels));
-        if (!activeChannelId && response.channels.length > 0) {
+        const pendingChannelId = pendingNotificationChannelRef.current;
+        if (
+          pendingChannelId &&
+          response.channels.some((channel) => channel.id === pendingChannelId)
+        ) {
+          dispatch(setActiveChannel(pendingChannelId));
+          pendingNotificationChannelRef.current = null;
+        } else if (!activeChannelId && response.channels.length > 0) {
           dispatch(setActiveChannel(response.channels[0].id));
         }
       }
