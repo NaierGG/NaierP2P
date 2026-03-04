@@ -2,6 +2,8 @@ import { api } from "@/shared/lib/api";
 import {
   isLikelyNetworkError,
   mockApproveDevice,
+  mockExportBackup,
+  mockImportBackup,
   mockCreatePendingDevice,
   mockGetProfile,
   mockListDevices,
@@ -9,6 +11,7 @@ import {
   mockUpdateProfile,
 } from "@/shared/lib/mockApi";
 import type { Device, User } from "@/shared/types";
+import type { EncryptedBackupBlob } from "@/shared/lib/crypto";
 
 interface ProfileResponse {
   user: User;
@@ -20,6 +23,17 @@ interface DevicesResponse {
 
 interface DeviceResponse {
   device: Device & { current?: boolean };
+}
+
+interface BackupExportResponse {
+  backup_version: number;
+  updated_at: string;
+}
+
+interface BackupImportResponse {
+  backup_blob: string;
+  backup_version: number;
+  updated_at: string;
 }
 
 export async function fetchProfile(accessToken: string | null) {
@@ -108,5 +122,40 @@ export async function approveDevice(accessToken: string | null, deviceId: string
     }
 
     await mockApproveDevice(accessToken, deviceId);
+  }
+}
+
+export async function exportEncryptedBackup(
+  accessToken: string | null,
+  backupBlob: EncryptedBackupBlob
+) {
+  try {
+    const response = await api.post<BackupExportResponse>("/auth/backup/export", {
+      backup_blob: JSON.stringify(backupBlob),
+      backup_version: backupBlob.version,
+    });
+    return response.data;
+  } catch (error) {
+    if (!isLikelyNetworkError(error) || !accessToken) {
+      throw error;
+    }
+
+    return mockExportBackup(accessToken, backupBlob);
+  }
+}
+
+export async function importEncryptedBackup(accessToken: string | null) {
+  try {
+    const response = await api.post<BackupImportResponse>("/auth/backup/import");
+    return {
+      ...response.data,
+      parsed: JSON.parse(response.data.backup_blob) as EncryptedBackupBlob,
+    };
+  } catch (error) {
+    if (!isLikelyNetworkError(error) || !accessToken) {
+      throw error;
+    }
+
+    return mockImportBackup(accessToken);
   }
 }

@@ -28,6 +28,8 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup, authMiddleware gin.Han
 	router.POST("/devices/pending", authMiddleware, h.registerPendingDevice)
 	router.POST("/devices/approve", authMiddleware, h.approveDevice)
 	router.DELETE("/devices/:id", authMiddleware, h.revokeDevice)
+	router.POST("/backup/export", authMiddleware, h.exportBackup)
+	router.POST("/backup/import", authMiddleware, h.importBackup)
 }
 
 func (h *Handler) challenge(c *gin.Context) {
@@ -260,6 +262,44 @@ func (h *Handler) approveDevice(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+func (h *Handler) exportBackup(c *gin.Context) {
+	userID, err := UserIDFromContext(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized", "message": "missing user context"})
+		return
+	}
+
+	var req BackupExportRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "message": err.Error()})
+		return
+	}
+
+	resp, err := h.service.SaveEncryptedBackup(c.Request.Context(), userID, req)
+	if err != nil {
+		h.respondError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) importBackup(c *gin.Context) {
+	userID, err := UserIDFromContext(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized", "message": "missing user context"})
+		return
+	}
+
+	resp, err := h.service.LoadEncryptedBackup(c.Request.Context(), userID)
+	if err != nil {
+		h.respondError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
 func (h *Handler) respondError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, ErrInvalidCredentials):
@@ -270,6 +310,8 @@ func (h *Handler) respondError(c *gin.Context, err error) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh_revoked", "message": err.Error()})
 	case errors.Is(err, ErrInvalidDevice):
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_device_request", "message": err.Error()})
+	case errors.Is(err, ErrBackupNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": "backup_not_found", "message": err.Error()})
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "auth_error", "message": err.Error()})
 	}

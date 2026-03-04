@@ -97,3 +97,19 @@ type RegisterPendingDeviceRequest struct {
 	DeviceName        string `json:"device_name,omitempty" validate:"omitempty,max=100"`
 	Platform          string `json:"platform,omitempty" validate:"omitempty,oneof=web ios android"`
 }
+
+type BackupExportRequest struct {
+	BackupBlob    string `json:"backup_blob" validate:"required"`
+	BackupVersion int    `json:"backup_version,omitempty" validate:"omitempty,min=1,max=10"`
+}
+
+type BackupExportResponse struct {
+	BackupVersion int       `json:"backup_version"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+type BackupImportResponse struct {
+	BackupBlob    string    `json:"backup_blob"`
+	BackupVersion int       `json:"backup_version"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}

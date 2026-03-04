@@ -9,6 +9,7 @@ class SecureStorageService {
   static const _identityKey = 'identity_keypair';
   static const _sessionKey = 'auth_session';
   static const _syncStateKey = 'sync_state';
+  static const _encryptedBackupKey = 'encrypted_backup_blob';
   static const _channelBox = 'channel_keys';
   static const _messageBox = 'message_cache';
 
@@ -42,6 +43,18 @@ class SecureStorageService {
 
   Future<void> clearIdentityKeyPair() async {
     await _secureStorage.delete(key: _identityKey);
+  }
+
+  Future<void> saveEncryptedBackup(String payload) async {
+    await _secureStorage.write(key: _encryptedBackupKey, value: payload);
+  }
+
+  Future<String?> getEncryptedBackup() async {
+    return _secureStorage.read(key: _encryptedBackupKey);
+  }
+
+  Future<void> clearEncryptedBackup() async {
+    await _secureStorage.delete(key: _encryptedBackupKey);
   }
 
   Future<void> saveSession(Map<String, String?> session) async {

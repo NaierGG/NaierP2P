@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,6 +28,7 @@ import (
 const (
 	EventMessageForward = "MESSAGE_FORWARD"
 	EventUserSync       = "USER_SYNC"
+	EventChannelStateSync = "CHANNEL_STATE_SYNC"
 	maxClockSkew        = 10 * time.Minute
 )
 
@@ -101,26 +104,38 @@ func (s *Service) SendEvent(ctx context.Context, targetDomain string, event Fede
 	return nil
 }
 
-func (s *Service) VerifyAndProcessEvent(ctx context.Context, event FederatedEvent) error {
+func (s *Service) VerifyAndProcessEvent(ctx context.Context, event FederatedEvent) (EventProcessingResult, error) {
 	if err := s.validateIncomingEvent(event); err != nil {
-		return err
+		return EventProcessingResult{}, err
 	}
 
 	publicKey, err := s.resolver.GetServerKey(ctx, event.ServerID)
 	if err != nil {
-		return err
+		return EventProcessingResult{}, err
 	}
 
 	valid, err := verifyEventSignature(event, publicKey)
 	if err != nil {
-		return err
+		return EventProcessingResult{}, err
 	}
 	if !valid {
-		return fmt.Errorf("invalid federated event signature")
+		return EventProcessingResult{}, fmt.Errorf("invalid federated event signature")
+	}
+
+	payloadHash := hashFederatedPayload(event.Payload)
+	duplicate, err := s.recordIncomingEvent(ctx, event, payloadHash)
+	if err != nil {
+		return EventProcessingResult{}, err
+	}
+	if duplicate {
+		return EventProcessingResult{
+			Processed: false,
+			Duplicate: true,
+		}, nil
 	}
 
 	if err := s.resolver.UpsertServerKey(ctx, event.ServerID, publicKey); err != nil {
-		return err
+		return EventProcessingResult{}, err
 	}
 
 	if _, err := s.db.Exec(ctx, `
@@ -128,10 +143,21 @@ func (s *Service) VerifyAndProcessEvent(ctx context.Context, event FederatedEven
 		SET last_ping = NOW(), status = 'active'
 		WHERE domain = $1
 	`, strings.ToLower(event.ServerID)); err != nil {
-		return fmt.Errorf("update federated server heartbeat: %w", err)
+		return EventProcessingResult{}, fmt.Errorf("update federated server heartbeat: %w", err)
 	}
 
-	return s.processEvent(ctx, event)
+	if err := s.processEvent(ctx, event); err != nil {
+		_ = s.discardIncomingEvent(ctx, event)
+		return EventProcessingResult{}, err
+	}
+	if err := s.markEventProcessed(ctx, event); err != nil {
+		return EventProcessingResult{}, err
+	}
+
+	return EventProcessingResult{
+		Processed: true,
+		Duplicate: false,
+	}, nil
 }
 
 func (s *Service) ForwardMessageToServer(ctx context.Context, msg message.MessageDTO, targetServer string) error {
@@ -177,6 +203,10 @@ func (s *Service) FetchRemoteUser(ctx context.Context, username, domain string) 
 		return nil, fmt.Errorf("decode remote user response: %w", err)
 	}
 
+	if err := s.upsertRemoteUser(ctx, response.User, domain); err != nil {
+		return nil, err
+	}
+
 	return &response.User, nil
 }
 
@@ -184,6 +214,7 @@ func (s *Service) GetLocalUser(ctx context.Context, username string) (*auth.User
 	var user auth.UserDTO
 	err := s.db.QueryRow(ctx, `
 		SELECT id::text, username, display_name, public_key,
+		       identity_signing_key, identity_exchange_key,
 		       COALESCE(avatar_url, ''), COALESCE(bio, ''), server_id, created_at
 		FROM users
 		WHERE username = $1
@@ -192,6 +223,8 @@ func (s *Service) GetLocalUser(ctx context.Context, username string) (*auth.User
 		&user.Username,
 		&user.DisplayName,
 		&user.PublicKey,
+		&user.IdentitySigningKey,
+		&user.IdentityExchangeKey,
 		&user.AvatarURL,
 		&user.Bio,
 		&user.ServerID,
@@ -205,6 +238,128 @@ func (s *Service) GetLocalUser(ctx context.Context, username string) (*auth.User
 	}
 
 	return &user, nil
+}
+
+func (s *Service) GetLocalChannelState(ctx context.Context, channelID string) (FederatedChannelStatePayload, error) {
+	var state FederatedChannelStatePayload
+	err := s.db.QueryRow(ctx, `
+		SELECT id::text, type, COALESCE(name, ''), COALESCE(description, ''), is_encrypted, max_members
+		FROM channels
+		WHERE id::text = $1
+	`, channelID).Scan(
+		&state.ChannelID,
+		&state.ChannelType,
+		&state.Name,
+		&state.Description,
+		&state.IsEncrypted,
+		&state.MaxMembers,
+	)
+	if err != nil {
+		return FederatedChannelStatePayload{}, fmt.Errorf("get local channel state: %w", err)
+	}
+
+	rows, err := s.db.Query(ctx, `
+		SELECT u.id::text, u.username, u.display_name, u.public_key,
+		       u.identity_signing_key, u.identity_exchange_key,
+		       COALESCE(u.avatar_url, ''), COALESCE(u.bio, ''), u.server_id, u.created_at,
+		       cm.role, cm.joined_at, cm.is_muted
+		FROM channel_members cm
+		JOIN users u ON u.id = cm.user_id
+		WHERE cm.channel_id::text = $1
+		ORDER BY CASE cm.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, cm.joined_at
+	`, channelID)
+	if err != nil {
+		return FederatedChannelStatePayload{}, fmt.Errorf("list local channel members: %w", err)
+	}
+	defer rows.Close()
+
+	state.Members = make([]FederatedChannelMember, 0)
+	for rows.Next() {
+		var member FederatedChannelMember
+		if err := rows.Scan(
+			&member.User.ID,
+			&member.User.Username,
+			&member.User.DisplayName,
+			&member.User.PublicKey,
+			&member.User.IdentitySigningKey,
+			&member.User.IdentityExchangeKey,
+			&member.User.AvatarURL,
+			&member.User.Bio,
+			&member.User.ServerID,
+			&member.User.CreatedAt,
+			&member.Role,
+			&member.JoinedAt,
+			&member.IsMuted,
+		); err != nil {
+			return FederatedChannelStatePayload{}, fmt.Errorf("scan local channel member: %w", err)
+		}
+		state.Members = append(state.Members, member)
+	}
+	if err := rows.Err(); err != nil {
+		return FederatedChannelStatePayload{}, err
+	}
+	state.MemberCount = len(state.Members)
+
+	return state, nil
+}
+
+func (s *Service) SendChannelStateToServer(ctx context.Context, actorID, channelID uuid.UUID, targetDomain string) error {
+	if err := s.ensureActorIsChannelMember(ctx, actorID, channelID); err != nil {
+		return err
+	}
+
+	state, err := s.GetLocalChannelState(ctx, channelID.String())
+	if err != nil {
+		return err
+	}
+
+	payload, err := json.Marshal(state)
+	if err != nil {
+		return fmt.Errorf("marshal channel state payload: %w", err)
+	}
+
+	return s.SendEvent(ctx, targetDomain, FederatedEvent{
+		Type:    EventChannelStateSync,
+		Payload: payload,
+	})
+}
+
+func (s *Service) PullChannelStateFromServer(ctx context.Context, actorID, channelID uuid.UUID, targetDomain string) (FederatedChannelStatePayload, error) {
+	if err := s.ensureActorIsChannelMember(ctx, actorID, channelID); err != nil {
+		return FederatedChannelStatePayload{}, err
+	}
+
+	resolved, err := s.resolver.ResolveServer(ctx, targetDomain)
+	if err != nil {
+		return FederatedChannelStatePayload{}, err
+	}
+
+	requestURL := joinURL(resolved.Endpoint, "/_federation/v1/channels/"+url.PathEscape(channelID.String())+"/state")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return FederatedChannelStatePayload{}, fmt.Errorf("create remote channel state request: %w", err)
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return FederatedChannelStatePayload{}, fmt.Errorf("pull remote channel state from %s: %w", targetDomain, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		payload, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return FederatedChannelStatePayload{}, fmt.Errorf("remote channel state request failed with status %d: %s", resp.StatusCode, strings.TrimSpace(string(payload)))
+	}
+
+	var response ChannelStateResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return FederatedChannelStatePayload{}, fmt.Errorf("decode remote channel state response: %w", err)
+	}
+	if err := s.upsertRemoteChannelState(ctx, response.Channel, targetDomain); err != nil {
+		return FederatedChannelStatePayload{}, err
+	}
+
+	return response.Channel, nil
 }
 
 func (s *Service) GetServerKeyResponse() ServerKeyResponse {
@@ -239,10 +394,19 @@ func (s *Service) processEvent(ctx context.Context, event FederatedEvent) error 
 		if err := json.Unmarshal(event.Payload, &payload); err != nil {
 			return fmt.Errorf("decode user sync payload: %w", err)
 		}
-		if payload.User.Username == "" || payload.User.PublicKey == "" {
+		if payload.User.Username == "" || payload.User.IdentitySigningKey == "" || payload.User.IdentityExchangeKey == "" {
 			return fmt.Errorf("invalid user sync payload")
 		}
-		return nil
+		return s.upsertRemoteUser(ctx, payload.User, event.ServerID)
+	case EventChannelStateSync:
+		var payload FederatedChannelStatePayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Errorf("decode channel state payload: %w", err)
+		}
+		if payload.ChannelID == "" || payload.ChannelType == "" {
+			return fmt.Errorf("invalid channel state payload")
+		}
+		return s.upsertRemoteChannelState(ctx, payload, event.ServerID)
 	default:
 		if !json.Valid(event.Payload) {
 			return fmt.Errorf("invalid federated payload")
@@ -275,6 +439,61 @@ func (s *Service) validateIncomingEvent(event FederatedEvent) error {
 
 	if !json.Valid(event.Payload) {
 		return fmt.Errorf("payload must be valid json")
+	}
+
+	return nil
+}
+
+func (s *Service) recordIncomingEvent(ctx context.Context, event FederatedEvent, payloadHash string) (bool, error) {
+	commandTag, err := s.db.Exec(ctx, `
+		INSERT INTO federated_events (event_id, origin_server, event_type, payload_hash)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (origin_server, event_id) DO NOTHING
+	`, event.EventID, strings.ToLower(event.ServerID), event.Type, payloadHash)
+	if err != nil {
+		return false, fmt.Errorf("record federated event: %w", err)
+	}
+
+	if commandTag.RowsAffected() > 0 {
+		return false, nil
+	}
+
+	var existingHash string
+	err = s.db.QueryRow(ctx, `
+		SELECT payload_hash
+		FROM federated_events
+		WHERE origin_server = $1 AND event_id = $2
+	`, strings.ToLower(event.ServerID), event.EventID).Scan(&existingHash)
+	if err != nil {
+		return false, fmt.Errorf("load federated event dedupe record: %w", err)
+	}
+	if existingHash != payloadHash {
+		return false, fmt.Errorf("federated event id replayed with different payload")
+	}
+
+	return true, nil
+}
+
+func (s *Service) markEventProcessed(ctx context.Context, event FederatedEvent) error {
+	_, err := s.db.Exec(ctx, `
+		UPDATE federated_events
+		SET processed_at = NOW()
+		WHERE origin_server = $1 AND event_id = $2
+	`, strings.ToLower(event.ServerID), event.EventID)
+	if err != nil {
+		return fmt.Errorf("mark federated event processed: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Service) discardIncomingEvent(ctx context.Context, event FederatedEvent) error {
+	_, err := s.db.Exec(ctx, `
+		DELETE FROM federated_events
+		WHERE origin_server = $1 AND event_id = $2 AND processed_at IS NULL
+	`, strings.ToLower(event.ServerID), event.EventID)
+	if err != nil {
+		return fmt.Errorf("discard federated event: %w", err)
 	}
 
 	return nil
@@ -330,6 +549,127 @@ func payloadToSign(event FederatedEvent) ([]byte, error) {
 		Timestamp: event.Timestamp.UTC(),
 		Payload:   event.Payload,
 	})
+}
+
+func hashFederatedPayload(payload json.RawMessage) string {
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:])
+}
+
+func (s *Service) ensureActorIsChannelMember(ctx context.Context, actorID, channelID uuid.UUID) error {
+	var exists bool
+	err := s.db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM channel_members
+			WHERE channel_id = $1 AND user_id = $2
+		)
+	`, channelID, actorID).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("check local channel membership: %w", err)
+	}
+	if !exists {
+		return fmt.Errorf("actor is not a member of this channel")
+	}
+
+	return nil
+}
+
+func (s *Service) upsertRemoteUser(ctx context.Context, user auth.UserDTO, domain string) error {
+	if strings.TrimSpace(domain) == "" {
+		return fmt.Errorf("remote user domain is required")
+	}
+
+	_, err := s.db.Exec(ctx, `
+		INSERT INTO remote_users (
+			remote_user_id, domain, username, display_name, public_key,
+			identity_signing_key, identity_exchange_key, avatar_url, bio, last_synced_at, updated_at
+		)
+		VALUES ($1, $2, $3, $4, NULLIF($5, ''), $6, $7, NULLIF($8, ''), NULLIF($9, ''), NOW(), NOW())
+		ON CONFLICT (domain, username) DO UPDATE
+		SET remote_user_id = EXCLUDED.remote_user_id,
+		    display_name = EXCLUDED.display_name,
+		    public_key = EXCLUDED.public_key,
+		    identity_signing_key = EXCLUDED.identity_signing_key,
+		    identity_exchange_key = EXCLUDED.identity_exchange_key,
+		    avatar_url = EXCLUDED.avatar_url,
+		    bio = EXCLUDED.bio,
+		    last_synced_at = NOW(),
+		    updated_at = NOW()
+	`, user.ID, strings.ToLower(domain), user.Username, user.DisplayName, user.PublicKey, user.IdentitySigningKey, user.IdentityExchangeKey, user.AvatarURL, user.Bio)
+	if err != nil {
+		return fmt.Errorf("upsert remote user: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Service) upsertRemoteChannelState(ctx context.Context, state FederatedChannelStatePayload, originServer string) error {
+	originServer = strings.ToLower(strings.TrimSpace(originServer))
+	if originServer == "" {
+		return fmt.Errorf("origin server is required")
+	}
+
+	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin remote channel state transaction: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO remote_channels (
+			origin_server, remote_channel_id, channel_type, name, description,
+			is_encrypted, max_members, member_count, last_synced_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+		ON CONFLICT (origin_server, remote_channel_id) DO UPDATE
+		SET channel_type = EXCLUDED.channel_type,
+		    name = EXCLUDED.name,
+		    description = EXCLUDED.description,
+		    is_encrypted = EXCLUDED.is_encrypted,
+		    max_members = EXCLUDED.max_members,
+		    member_count = EXCLUDED.member_count,
+		    last_synced_at = NOW()
+	`, originServer, state.ChannelID, state.ChannelType, state.Name, state.Description, state.IsEncrypted, state.MaxMembers, state.MemberCount)
+	if err != nil {
+		return fmt.Errorf("upsert remote channel: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+		DELETE FROM remote_channel_memberships
+		WHERE origin_server = $1 AND remote_channel_id = $2
+	`, originServer, state.ChannelID)
+	if err != nil {
+		return fmt.Errorf("clear remote channel memberships: %w", err)
+	}
+
+	for _, member := range state.Members {
+		if member.User.Username == "" || member.User.IdentitySigningKey == "" || member.User.IdentityExchangeKey == "" {
+			return fmt.Errorf("remote channel member payload missing identity fields")
+		}
+		if err := s.upsertRemoteUser(ctx, member.User, originServer); err != nil {
+			return err
+		}
+
+		_, err = tx.Exec(ctx, `
+			INSERT INTO remote_channel_memberships (
+				origin_server, remote_channel_id, remote_user_id, username,
+				display_name, role, joined_at, is_muted, last_synced_at
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+		`, originServer, state.ChannelID, member.User.ID, member.User.Username, member.User.DisplayName, member.Role, member.JoinedAt, member.IsMuted)
+		if err != nil {
+			return fmt.Errorf("insert remote channel membership: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit remote channel state transaction: %w", err)
+	}
+
+	return nil
 }
 
 func decodePublicKey(value string) (ed25519.PublicKey, error) {

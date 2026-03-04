@@ -8,10 +8,10 @@ import { registerWithKeyPair, requestChallenge } from "@/features/auth/authApi";
 import { signChallenge } from "@/shared/lib/crypto";
 import { useEncryption } from "@/shared/hooks/useEncryption";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 
 export default function RegisterPage() {
   const dispatch = useAppDispatch();
@@ -37,7 +37,7 @@ export default function RegisterPage() {
     const trimmedUsername = username.trim();
     const trimmedDisplayName = displayName.trim();
     if (!trimmedUsername || !trimmedDisplayName) {
-      setError("사용자 이름과 표시 이름 모두 입력하세요.");
+      setError("Enter both a username and a display name.");
       return;
     }
 
@@ -86,7 +86,7 @@ export default function RegisterPage() {
 
       navigate("/app");
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "가입에 실패했습니다.");
+      setError(nextError instanceof Error ? nextError.message : "Failed to create the account.");
     } finally {
       setLoading(false);
     }
@@ -98,31 +98,31 @@ export default function RegisterPage() {
         <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
           <UserPlus className="h-6 w-6 text-primary" />
         </div>
-        <CardTitle className="text-xl">계정 만들기</CardTitle>
+        <CardTitle className="text-xl">Create your account</CardTitle>
         <CardDescription>
-          Naier 계정을 만들어 안전한 대화를 시작하세요.
+          Register a username and bind it to your long-term identity keys.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <Input
           onChange={(e) => setUsername(e.target.value)}
-          placeholder="사용자 이름"
+          placeholder="Username"
           value={username}
           autoFocus
         />
         <Input
           onChange={(e) => setDisplayName(e.target.value)}
-          placeholder="표시 이름"
+          placeholder="Display name"
           value={displayName}
         />
         {!hasKeyPair && (
           <div className="flex items-center gap-2 rounded-xl bg-accent p-3">
-            <Badge variant="warning">키 필요</Badge>
+            <Badge variant="warning">Required</Badge>
             <p className="text-sm text-muted-foreground">
               <Link to="/auth/keygen" className="font-medium text-primary hover:underline">
-                키 생성
-              </Link>
-              이 필요합니다.
+                Generate your identity keys
+              </Link>{" "}
+              before creating the account.
             </p>
           </div>
         )}
@@ -132,12 +132,12 @@ export default function RegisterPage() {
           onClick={() => void handleRegister()}
           className="w-full"
         >
-          {loading ? "가입 중..." : "계정 만들기"}
+          {loading ? "Creating account..." : "Create account"}
         </Button>
         <p className="text-center text-sm text-muted-foreground">
-          이미 계정이 있나요?{" "}
+          Already have an account?{" "}
           <Link to="/auth/login" className="font-medium text-primary hover:underline">
-            로그인
+            Log in
           </Link>
         </p>
       </CardContent>

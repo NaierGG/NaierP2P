@@ -9,6 +9,7 @@ import type {
   WSEvent,
   TypingPayload,
 } from "@/shared/types";
+import type { EncryptedBackupBlob } from "@/shared/lib/crypto";
 
 const MOCK_DB_KEY = "naier-mock-db";
 const MOCK_CHALLENGE_PREFIX = "naier-mock-challenge:";
@@ -25,6 +26,7 @@ interface MockDatabase {
   channels: Channel[];
   messages: Record<string, Message[]>;
   channelMembers: Record<string, ChannelMember[]>;
+  backups: Record<string, { backup_blob: string; backup_version: number; updated_at: string }>;
 }
 
 interface MockMessageListResponse {
@@ -123,6 +125,7 @@ function createSeedDatabase(): MockDatabase {
         createMember(guideUser, "member"),
       ],
     },
+    backups: {},
   };
 }
 
@@ -478,6 +481,35 @@ export async function mockApproveDevice(accessToken: string, deviceId: string) {
       : device
   );
   saveDatabase(database);
+}
+
+export async function mockExportBackup(accessToken: string, backupBlob: EncryptedBackupBlob) {
+  const userId = accessToken.replace(/^mock-access-/, "");
+  const database = loadDatabase();
+  database.backups[userId] = {
+    backup_blob: JSON.stringify(backupBlob),
+    backup_version: backupBlob.version,
+    updated_at: new Date().toISOString(),
+  };
+  saveDatabase(database);
+  return {
+    backup_version: backupBlob.version,
+    updated_at: database.backups[userId].updated_at,
+  };
+}
+
+export async function mockImportBackup(accessToken: string) {
+  const userId = accessToken.replace(/^mock-access-/, "");
+  const database = loadDatabase();
+  const backup = database.backups[userId];
+  if (!backup) {
+    throw new Error("No encrypted backup is stored for this mock account.");
+  }
+
+  return {
+    ...backup,
+    parsed: JSON.parse(backup.backup_blob) as EncryptedBackupBlob,
+  };
 }
 
 export async function mockListChannels() {

@@ -8,8 +8,8 @@ import { loginWithChallenge, requestChallenge } from "@/features/auth/authApi";
 import { useEncryption } from "@/shared/hooks/useEncryption";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 
 export default function LoginPage() {
   const dispatch = useAppDispatch();
@@ -22,7 +22,7 @@ export default function LoginPage() {
   async function handleLogin() {
     const trimmedUsername = username.trim();
     if (!trimmedUsername) {
-      setError("사용자 이름을 입력하세요.");
+      setError("Enter your username.");
       return;
     }
 
@@ -63,7 +63,7 @@ export default function LoginPage() {
 
       navigate("/app");
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "로그인에 실패했습니다.");
+      setError(nextError instanceof Error ? nextError.message : "Failed to log in.");
     } finally {
       setLoading(false);
     }
@@ -77,7 +77,7 @@ export default function LoginPage() {
         </div>
         <CardTitle className="text-xl">Naier</CardTitle>
         <CardDescription>
-          디바이스 서명 키로 서버 챌린지에 서명하여 로그인합니다.
+          Sign in by answering a server challenge with your trusted device signing key.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -86,20 +86,28 @@ export default function LoginPage() {
           onKeyDown={(e) => {
             if (e.key === "Enter") void handleLogin();
           }}
-          placeholder="사용자 이름"
+          placeholder="Username"
           value={username}
           autoFocus
         />
         {error && <p className="text-sm text-destructive">{error}</p>}
         <Button disabled={loading} onClick={() => void handleLogin()} className="w-full">
-          {loading ? "서명 중..." : "로그인"}
+          {loading ? "Signing in..." : "Log in"}
         </Button>
-        <p className="text-center text-sm text-muted-foreground">
-          처음이신가요?{" "}
-          <Link to="/auth/register" className="font-medium text-primary hover:underline">
-            계정 만들기
-          </Link>
-        </p>
+        <div className="flex flex-col gap-2 text-center text-sm text-muted-foreground">
+          <p>
+            New here?{" "}
+            <Link to="/auth/register" className="font-medium text-primary hover:underline">
+              Create an account
+            </Link>
+          </p>
+          <p>
+            Adding another browser or laptop?{" "}
+            <Link to="/auth/device" className="font-medium text-primary hover:underline">
+              Add a new device
+            </Link>
+          </p>
+        </div>
       </CardContent>
     </Card>
   );

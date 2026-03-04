@@ -3,6 +3,8 @@ import * as naclUtil from "tweetnacl-util";
 
 const AES_KEY_LENGTH = 32;
 const AES_GCM_IV_LENGTH = 12;
+const BACKUP_SALT_LENGTH = 16;
+const BACKUP_PBKDF2_ITERATIONS = 210_000;
 
 export interface SigningKeyPair {
   publicKey: string;
@@ -23,6 +25,17 @@ export interface KeyBundle {
     signing: SigningKeyPair;
     exchange: ExchangeKeyPair;
   };
+}
+
+export interface EncryptedBackupBlob {
+  version: number;
+  algorithm: "AES-GCM";
+  kdf: "PBKDF2-SHA-256";
+  iterations: number;
+  salt: string;
+  iv: string;
+  ciphertext: string;
+  created_at: string;
 }
 
 export async function generateKeyPair(): Promise<ExchangeKeyPair> {
@@ -183,12 +196,89 @@ export function toLegacyKeyPair(bundle: KeyBundle) {
   };
 }
 
+export async function encryptKeyBundleBackup(
+  keyBundle: KeyBundle,
+  passphrase: string
+): Promise<EncryptedBackupBlob> {
+  if (!passphrase.trim()) {
+    throw new Error("Backup passphrase is required.");
+  }
+
+  const salt = crypto.getRandomValues(new Uint8Array(BACKUP_SALT_LENGTH));
+  const iv = crypto.getRandomValues(new Uint8Array(AES_GCM_IV_LENGTH));
+  const cryptoKey = await derivePassphraseKey(passphrase, salt);
+  const payload = naclUtil.decodeUTF8(JSON.stringify(keyBundle));
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: toArrayBuffer(iv) },
+    cryptoKey,
+    toArrayBuffer(payload)
+  );
+
+  return {
+    version: 1,
+    algorithm: "AES-GCM",
+    kdf: "PBKDF2-SHA-256",
+    iterations: BACKUP_PBKDF2_ITERATIONS,
+    salt: encodeBase64(salt),
+    iv: encodeBase64(iv),
+    ciphertext: encodeBase64(new Uint8Array(ciphertext)),
+    created_at: new Date().toISOString(),
+  };
+}
+
+export async function decryptKeyBundleBackup(
+  backup: EncryptedBackupBlob,
+  passphrase: string
+): Promise<KeyBundle> {
+  if (!passphrase.trim()) {
+    throw new Error("Backup passphrase is required.");
+  }
+
+  const salt = decodeBase64(backup.salt);
+  const iv = decodeBase64(backup.iv);
+  const key = await derivePassphraseKey(passphrase, salt, backup.iterations);
+  const plaintext = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: toArrayBuffer(iv) },
+    key,
+    toArrayBuffer(decodeBase64(backup.ciphertext))
+  );
+
+  return JSON.parse(naclUtil.encodeUTF8(new Uint8Array(plaintext))) as KeyBundle;
+}
+
 function normalizeAESKey(input: Uint8Array): Uint8Array {
   if (input.length === AES_KEY_LENGTH) {
     return input;
   }
 
   throw new Error("Channel key must be 32 bytes");
+}
+
+async function derivePassphraseKey(
+  passphrase: string,
+  salt: Uint8Array,
+  iterations = BACKUP_PBKDF2_ITERATIONS
+) {
+  const baseKey = await crypto.subtle.importKey(
+    "raw",
+    toArrayBuffer(naclUtil.decodeUTF8(passphrase)),
+    "PBKDF2",
+    false,
+    ["deriveKey"]
+  );
+
+  return crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: toArrayBuffer(salt),
+      iterations,
+      hash: "SHA-256",
+    },
+    baseKey,
+    { name: "AES-GCM", length: AES_KEY_LENGTH * 8 },
+    false,
+    ["encrypt", "decrypt"]
+  );
 }
 
 function encodeBase64(value: Uint8Array): string {

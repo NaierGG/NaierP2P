@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS encrypted_backups (
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  backup_blob TEXT NOT NULL,
+  backup_version INT NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

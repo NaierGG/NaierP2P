@@ -141,6 +141,7 @@ func main() {
 	channelHandler.RegisterRoutes(protected)
 	messageHandler.RegisterRoutes(protected)
 	mediaHandler.RegisterRoutes(protected)
+	federationHandler.RegisterProtectedRoutes(protected)
 	federationHandler.RegisterRoutes(router)
 
 	server := &http.Server{

@@ -8,6 +8,7 @@ import type { RootState } from "@/app/store";
 const LoginPage = lazy(() => import("@/features/auth/LoginPage"));
 const RegisterPage = lazy(() => import("@/features/auth/RegisterPage"));
 const KeygenFlow = lazy(() => import("@/features/auth/KeygenFlow"));
+const DeviceLinkPage = lazy(() => import("@/features/auth/DeviceLinkPage"));
 const ChannelList = lazy(() => import("@/features/channels/ChannelList"));
 const SettingsPage = lazy(() => import("@/features/settings/SettingsPage"));
 
@@ -71,6 +72,10 @@ export const router = createBrowserRouter([
       {
         path: "keygen",
         element: <KeygenFlow />,
+      },
+      {
+        path: "device",
+        element: <DeviceLinkPage />,
       },
     ],
   },

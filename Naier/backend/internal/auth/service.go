@@ -22,6 +22,7 @@ var (
 	ErrChallengeExpired   = errors.New("challenge expired")
 	ErrRefreshRevoked     = errors.New("refresh token revoked")
 	ErrInvalidDevice      = errors.New("invalid device request")
+	ErrBackupNotFound     = errors.New("backup not found")
 )
 
 type Service struct {
@@ -527,6 +528,53 @@ func (s *Service) ApproveDevice(ctx context.Context, userID, currentDeviceID, ta
 	}
 
 	return nil
+}
+
+func (s *Service) SaveEncryptedBackup(ctx context.Context, userID uuid.UUID, req BackupExportRequest) (BackupExportResponse, error) {
+	if err := s.validate.Struct(req); err != nil {
+		return BackupExportResponse{}, err
+	}
+
+	backupVersion := req.BackupVersion
+	if backupVersion == 0 {
+		backupVersion = 1
+	}
+
+	var updatedAt time.Time
+	err := s.db.QueryRow(ctx, `
+		INSERT INTO encrypted_backups (user_id, backup_blob, backup_version)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		SET backup_blob = EXCLUDED.backup_blob,
+		    backup_version = EXCLUDED.backup_version,
+		    updated_at = NOW()
+		RETURNING updated_at
+	`, userID, req.BackupBlob, backupVersion).Scan(&updatedAt)
+	if err != nil {
+		return BackupExportResponse{}, fmt.Errorf("save encrypted backup: %w", err)
+	}
+
+	return BackupExportResponse{
+		BackupVersion: backupVersion,
+		UpdatedAt:     updatedAt,
+	}, nil
+}
+
+func (s *Service) LoadEncryptedBackup(ctx context.Context, userID uuid.UUID) (BackupImportResponse, error) {
+	var response BackupImportResponse
+	err := s.db.QueryRow(ctx, `
+		SELECT backup_blob, backup_version, updated_at
+		FROM encrypted_backups
+		WHERE user_id = $1
+	`, userID).Scan(&response.BackupBlob, &response.BackupVersion, &response.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return BackupImportResponse{}, ErrBackupNotFound
+	}
+	if err != nil {
+		return BackupImportResponse{}, fmt.Errorf("load encrypted backup: %w", err)
+	}
+
+	return response, nil
 }
 
 func (s *Service) issueAuthResponse(user userRecord, deviceID uuid.UUID) (AuthResponse, error) {

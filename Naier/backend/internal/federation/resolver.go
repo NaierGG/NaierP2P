@@ -50,6 +50,9 @@ func (r *Resolver) ResolveServer(ctx context.Context, domain string) (ResolvedSe
 	if err != nil {
 		return ResolvedServer{}, err
 	}
+	if server, ok := r.getCached(domain); ok && server.PublicKey != "" && server.Endpoint != "" {
+		return server, nil
+	}
 
 	endpoint, err := r.lookupEndpoint(ctx, domain)
 	if err != nil {
@@ -77,16 +80,20 @@ func (r *Resolver) GetServerKey(ctx context.Context, domain string) (string, err
 	}
 
 	var publicKey string
+	var endpoint string
 	err := r.db.QueryRow(ctx, `
-		SELECT public_key
+		SELECT public_key, COALESCE(endpoint, '')
 		FROM federated_servers
 		WHERE domain = $1 AND status <> 'blocked'
-	`, domain).Scan(&publicKey)
+	`, domain).Scan(&publicKey, &endpoint)
 	if err == nil && publicKey != "" {
+		if endpoint == "" {
+			endpoint = buildDefaultEndpoint(domain)
+		}
 		cached := ResolvedServer{
 			Domain:    domain,
 			PublicKey: publicKey,
-			Endpoint:  buildDefaultEndpoint(domain),
+			Endpoint:  endpoint,
 		}
 		r.setCached(domain, cached)
 		return publicKey, nil
@@ -100,7 +107,7 @@ func (r *Resolver) GetServerKey(ctx context.Context, domain string) (string, err
 		return "", fmt.Errorf("resolve server key for %s: %w", domain, err)
 	}
 
-	if upsertErr := r.upsertServer(ctx, domain, publicKey); upsertErr != nil {
+	if upsertErr := r.upsertServer(ctx, domain, publicKey, endpoint); upsertErr != nil {
 		return "", upsertErr
 	}
 
@@ -114,18 +121,25 @@ func (r *Resolver) GetServerKey(ctx context.Context, domain string) (string, err
 }
 
 func (r *Resolver) UpsertServerKey(ctx context.Context, domain, publicKey string) error {
+	return r.UpsertResolvedServer(ctx, domain, publicKey, "")
+}
+
+func (r *Resolver) UpsertResolvedServer(ctx context.Context, domain, publicKey, endpoint string) error {
 	domain = strings.ToLower(strings.TrimSpace(domain))
 	if domain == "" || strings.TrimSpace(publicKey) == "" {
 		return fmt.Errorf("domain and public key are required")
 	}
 
-	if err := r.upsertServer(ctx, domain, publicKey); err != nil {
+	if err := r.upsertServer(ctx, domain, publicKey, endpoint); err != nil {
 		return err
 	}
 
 	cached, _ := r.getCached(domain)
 	cached.Domain = domain
 	cached.PublicKey = publicKey
+	if endpoint != "" {
+		cached.Endpoint = endpoint
+	}
 	if cached.Endpoint == "" {
 		cached.Endpoint = buildDefaultEndpoint(domain)
 	}
@@ -162,13 +176,16 @@ func (r *Resolver) lookupTXTRecord(ctx context.Context, domain string) (string, 
 	return "", "", fmt.Errorf("no naier txt record found")
 }
 
-func (r *Resolver) upsertServer(ctx context.Context, domain, publicKey string) error {
+func (r *Resolver) upsertServer(ctx context.Context, domain, publicKey, endpoint string) error {
 	_, err := r.db.Exec(ctx, `
-		INSERT INTO federated_servers (domain, public_key, status, last_ping)
-		VALUES ($1, $2, 'active', NOW())
+		INSERT INTO federated_servers (domain, public_key, endpoint, status, last_ping)
+		VALUES ($1, $2, NULLIF($3, ''), 'active', NOW())
 		ON CONFLICT (domain)
-		DO UPDATE SET public_key = EXCLUDED.public_key, status = 'active', last_ping = NOW()
-	`, domain, publicKey)
+		DO UPDATE SET public_key = EXCLUDED.public_key,
+		              endpoint = COALESCE(EXCLUDED.endpoint, federated_servers.endpoint),
+		              status = 'active',
+		              last_ping = NOW()
+	`, domain, publicKey, endpoint)
 	if err != nil {
 		return fmt.Errorf("upsert federated server: %w", err)
 	}
