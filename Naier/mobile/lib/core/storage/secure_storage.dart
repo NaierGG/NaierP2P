@@ -40,6 +40,10 @@ class SecureStorageService {
     );
   }
 
+  Future<void> clearIdentityKeyPair() async {
+    await _secureStorage.delete(key: _identityKey);
+  }
+
   Future<void> saveSession(Map<String, String?> session) async {
     await _secureStorage.write(key: _sessionKey, value: jsonEncode(session));
   }

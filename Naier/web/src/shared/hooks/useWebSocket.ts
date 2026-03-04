@@ -70,6 +70,18 @@ export function useWebSocket() {
     const unsubscribers = [
       client.on("state", (state) => setConnectionState(state)),
       client.on("message", (event) => {
+        if (event.type === "MESSAGE_NEW") {
+          const payload = event.payload as Message;
+          if (payload.id) {
+            client.send({
+              type: "DELIVERY_ACK",
+              payload: {
+                messageId: payload.id,
+              },
+            });
+          }
+        }
+
         routeEvent(event, {
           activeChannelId: activeChannelIdRef.current,
           currentUserId: currentUserIdRef.current,
@@ -113,6 +125,14 @@ export function useWebSocket() {
           const payload = event.message ?? event.reaction ?? event.read_state;
           if (!payload) {
             continue;
+          }
+          if (event.type === "MESSAGE_NEW" && event.message?.id) {
+            client.send({
+              type: "DELIVERY_ACK",
+              payload: {
+                messageId: event.message.id,
+              },
+            });
           }
           routeEvent(
             {

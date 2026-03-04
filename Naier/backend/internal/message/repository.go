@@ -54,6 +54,11 @@ type readEventRecord struct {
 	CreatedAt        time.Time
 }
 
+type deliveryTarget struct {
+	DeviceID uuid.UUID
+	UserID   uuid.UUID
+}
+
 func NewRepository(db *pgxpool.Pool) *Repository {
 	return &Repository{db: db}
 }
@@ -273,6 +278,113 @@ func (r *Repository) GetMessageSequence(ctx context.Context, messageID uuid.UUID
 	}
 
 	return sequence, nil
+}
+
+func (r *Repository) EnsureMessageDeliveries(ctx context.Context, messageID, channelID, senderDeviceID uuid.UUID, sequence int64) error {
+	targets, err := r.getDeliveryTargets(ctx, channelID)
+	if err != nil {
+		return err
+	}
+	if len(targets) == 0 {
+		return nil
+	}
+
+	for _, target := range targets {
+		status := "pending"
+		var deliveredAt *time.Time
+		var readAt *time.Time
+		if target.DeviceID == senderDeviceID {
+			now := time.Now().UTC()
+			deliveredAt = &now
+			readAt = &now
+			status = "read"
+		}
+
+		_, execErr := r.db.Exec(ctx, `
+			INSERT INTO message_deliveries (message_id, device_id, delivered_at, read_at, status)
+			VALUES ($1, $2, $3, $4, $5)
+			ON CONFLICT (message_id, device_id) DO NOTHING
+		`, messageID, target.DeviceID, deliveredAt, readAt, status)
+		if execErr != nil {
+			return fmt.Errorf("ensure message delivery rows: %w", execErr)
+		}
+
+		if target.DeviceID == senderDeviceID {
+			_, execErr = r.db.Exec(ctx, `
+				UPDATE channel_members
+				SET last_read_at = NOW(),
+				    last_read_sequence = GREATEST(last_read_sequence, $3)
+				WHERE channel_id = $1 AND user_id = $2
+			`, channelID, target.UserID, sequence)
+			if execErr != nil {
+				return fmt.Errorf("advance sender read pointer: %w", execErr)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (r *Repository) MarkMessagesDelivered(ctx context.Context, deviceID uuid.UUID, messageIDs []uuid.UUID) error {
+	if len(messageIDs) == 0 {
+		return nil
+	}
+
+	_, err := r.db.Exec(ctx, `
+		UPDATE message_deliveries
+		SET delivered_at = COALESCE(delivered_at, NOW()),
+		    status = CASE WHEN status = 'read' THEN status ELSE 'delivered' END
+		WHERE device_id = $1
+		  AND message_id = ANY($2)
+	`, deviceID, messageIDs)
+	if err != nil {
+		return fmt.Errorf("mark messages delivered: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Repository) AckMessageDelivery(ctx context.Context, deviceID, userID, messageID uuid.UUID) error {
+	commandTag, err := r.db.Exec(ctx, `
+		UPDATE message_deliveries md
+		SET delivered_at = COALESCE(md.delivered_at, NOW()),
+		    acked_at = NOW(),
+		    status = CASE WHEN md.status = 'read' THEN md.status ELSE 'delivered' END
+		FROM messages m
+		JOIN channel_members cm ON cm.channel_id = m.channel_id
+		WHERE md.message_id = m.id
+		  AND md.message_id = $1
+		  AND md.device_id = $2
+		  AND cm.channel_id = m.channel_id
+		  AND cm.user_id = $3
+	`, messageID, deviceID, userID)
+	if err != nil {
+		return fmt.Errorf("ack message delivery: %w", err)
+	}
+	if commandTag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+
+	return nil
+}
+
+func (r *Repository) MarkChannelReadDeliveries(ctx context.Context, deviceID, channelID uuid.UUID, lastReadSequence int64) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE message_deliveries md
+		SET delivered_at = COALESCE(md.delivered_at, NOW()),
+		    read_at = COALESCE(md.read_at, NOW()),
+		    status = 'read'
+		FROM messages m
+		WHERE md.message_id = m.id
+		  AND md.device_id = $1
+		  AND m.channel_id = $2
+		  AND m.sequence <= $3
+	`, deviceID, channelID, lastReadSequence)
+	if err != nil {
+		return fmt.Errorf("mark channel read deliveries: %w", err)
+	}
+
+	return nil
 }
 
 func (r *Repository) AddReaction(ctx context.Context, messageID, userID uuid.UUID, emoji string) (*ReactionEventDTO, error) {
@@ -559,6 +671,31 @@ func (r *Repository) UpsertEventOffset(ctx context.Context, deviceID uuid.UUID, 
 	}
 
 	return nil
+}
+
+func (r *Repository) getDeliveryTargets(ctx context.Context, channelID uuid.UUID) ([]deliveryTarget, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT d.id, d.user_id
+		FROM channel_members cm
+		INNER JOIN devices d ON d.user_id = cm.user_id
+		WHERE cm.channel_id = $1
+		  AND d.revoked_at IS NULL
+	`, channelID)
+	if err != nil {
+		return nil, fmt.Errorf("get delivery targets: %w", err)
+	}
+	defer rows.Close()
+
+	targets := make([]deliveryTarget, 0)
+	for rows.Next() {
+		var target deliveryTarget
+		if err := rows.Scan(&target.DeviceID, &target.UserID); err != nil {
+			return nil, fmt.Errorf("scan delivery target: %w", err)
+		}
+		targets = append(targets, target)
+	}
+
+	return targets, rows.Err()
 }
 
 func (r *Repository) GetEventsAfter(ctx context.Context, userID uuid.UUID, afterSequence int64, limit int) ([]SyncEvent, bool, error) {

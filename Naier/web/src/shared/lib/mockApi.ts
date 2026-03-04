@@ -1,6 +1,14 @@
 import type { AxiosError } from "axios";
 
-import type { Channel, Device, Message, User, WSEvent, TypingPayload } from "@/shared/types";
+import type {
+  Channel,
+  ChannelMember,
+  Device,
+  Message,
+  User,
+  WSEvent,
+  TypingPayload,
+} from "@/shared/types";
 
 const MOCK_DB_KEY = "naier-mock-db";
 const MOCK_CHALLENGE_PREFIX = "naier-mock-challenge:";
@@ -16,6 +24,7 @@ interface MockDatabase {
   devices: Device[];
   channels: Channel[];
   messages: Record<string, Message[]>;
+  channelMembers: Record<string, ChannelMember[]>;
 }
 
 interface MockMessageListResponse {
@@ -104,6 +113,16 @@ function createSeedDatabase(): MockDatabase {
       [generalChannelId]: generalMessages,
       [buildChannelId]: buildMessages,
     },
+    channelMembers: {
+      [generalChannelId]: [
+        createMember(guideUser, "owner"),
+        createMember(operatorUser, "member"),
+      ],
+      [buildChannelId]: [
+        createMember(operatorUser, "owner"),
+        createMember(guideUser, "member"),
+      ],
+    },
   };
 }
 
@@ -141,6 +160,20 @@ function createChannel(input: {
     member_count: input.memberCount,
     created_at: input.createdAt,
     last_message: input.lastMessage,
+  };
+}
+
+function createMember(
+  user: User,
+  role: ChannelMember["role"] = "member"
+): ChannelMember {
+  return {
+    user_id: user.id,
+    username: user.username,
+    display_name: user.display_name,
+    role,
+    joined_at: new Date().toISOString(),
+    is_muted: false,
   };
 }
 
@@ -221,6 +254,16 @@ function ensureUserChannels(database: MockDatabase, user: User) {
     })
   );
   database.messages[dmChannelId] = [message];
+  const peerUser =
+    database.users.find((entry) => entry.id !== user.id) ??
+    createUser("relay", "Relay Guide");
+  if (!database.users.some((entry) => entry.id === peerUser.id)) {
+    database.users.push(peerUser);
+  }
+  database.channelMembers[dmChannelId] = [
+    createMember(user, "owner"),
+    createMember(peerUser, "member"),
+  ];
 
   saveDatabase(database);
   return database;
@@ -445,6 +488,13 @@ export async function mockListChannels() {
         left.last_message?.created_at ?? left.created_at
       )
     ),
+  };
+}
+
+export async function mockListChannelMembers(channelId: string) {
+  const database = loadDatabase();
+  return {
+    members: database.channelMembers[channelId] ?? [],
   };
 }
 

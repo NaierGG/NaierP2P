@@ -66,6 +66,11 @@ func (h *Handler) list(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
+	deviceID, err := auth.DeviceIDFromContext(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
 
 	channelID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -83,7 +88,7 @@ func (h *Handler) list(c *gin.Context) {
 		limit = parsed
 	}
 
-	response, err := h.service.ListByChannel(c.Request.Context(), channelID, userID, c.Query("cursor"), limit)
+	response, err := h.service.ListByChannel(c.Request.Context(), channelID, userID, deviceID, c.Query("cursor"), limit)
 	if err != nil {
 		h.respondError(c, err)
 		return
@@ -135,6 +140,11 @@ func (h *Handler) create(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
+	deviceID, err := auth.DeviceIDFromContext(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
 
 	channelID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -148,7 +158,7 @@ func (h *Handler) create(c *gin.Context) {
 		return
 	}
 
-	message, err := h.service.CreateHTTP(c.Request.Context(), channelID, userID, req)
+	message, err := h.service.CreateHTTP(c.Request.Context(), channelID, userID, deviceID, req)
 	if err != nil {
 		h.respondError(c, err)
 		return

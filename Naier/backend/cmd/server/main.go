@@ -81,6 +81,7 @@ func main() {
 	messageHandler := message.NewHandler(messageService)
 	presenceRepo := presence.NewRepository(redisClient)
 	hub := appws.NewHub(redisClient)
+	hub.SetDeliveryTracker(messageService)
 	presenceService := presence.NewService(presenceRepo, hub)
 	wsRouter := appws.NewRouter(hub, jwtManager, messageService, presenceService)
 	hub.SetRouter(wsRouter)

@@ -7,6 +7,7 @@ export type ClientEventType =
   | "MESSAGE_SEND"
   | "MESSAGE_EDIT"
   | "MESSAGE_DELETE"
+  | "DELIVERY_ACK"
   | "TYPING_START"
   | "TYPING_STOP"
   | "REACTION_ADD"

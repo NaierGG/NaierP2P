@@ -19,8 +19,13 @@ type Hub struct {
 	broadcast  chan *ChannelMessage
 	redis      *redis.Client
 	router     *Router
+	delivery   DeliveryTracker
 	instanceID string
 	mu         sync.RWMutex
+}
+
+type DeliveryTracker interface {
+	MarkDeliveredToDevice(ctx context.Context, deviceID, messageID uuid.UUID) error
 }
 
 type ChannelMessage struct {
@@ -52,6 +57,10 @@ func NewHub(redisClient *redis.Client) *Hub {
 
 func (h *Hub) SetRouter(router *Router) {
 	h.router = router
+}
+
+func (h *Hub) SetDeliveryTracker(delivery DeliveryTracker) {
+	h.delivery = delivery
 }
 
 func (h *Hub) Run(ctx context.Context) {
@@ -90,12 +99,40 @@ func (h *Hub) BroadcastToUser(userID uuid.UUID, event []byte) {
 	for _, client := range connections {
 		select {
 		case client.Send <- event:
+			h.markDeliveredIfMessage(client.DeviceID, event)
 		default:
 			go func(cl *Client) {
 				h.unregister <- cl
 			}(client)
 		}
 	}
+}
+
+func (h *Hub) markDeliveredIfMessage(deviceID uuid.UUID, event []byte) {
+	if h.delivery == nil {
+		return
+	}
+
+	var wsEvent WSEvent
+	if err := json.Unmarshal(event, &wsEvent); err != nil {
+		return
+	}
+	if wsEvent.Type != EventMessageNew {
+		return
+	}
+
+	var payload struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(wsEvent.Payload, &payload); err != nil {
+		return
+	}
+	messageID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return
+	}
+
+	_ = h.delivery.MarkDeliveredToDevice(context.Background(), deviceID, messageID)
 }
 
 func (h *Hub) GetOnlineUsersInChannel(channelID uuid.UUID) []uuid.UUID {

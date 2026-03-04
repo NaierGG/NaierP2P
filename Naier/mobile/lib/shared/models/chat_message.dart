@@ -34,6 +34,9 @@ class ChatMessage {
     required this.type,
     this.replyPreview,
     this.attachmentLabel,
+    this.clientEventId,
+    this.serverEventId,
+    this.sequence,
     this.isOwn = false,
     this.isEdited = false,
     this.status = ChatMessageDeliveryStatus.sent,
@@ -49,6 +52,9 @@ class ChatMessage {
   final ChatMessageType type;
   final String? replyPreview;
   final String? attachmentLabel;
+  final String? clientEventId;
+  final String? serverEventId;
+  final int? sequence;
   final bool isOwn;
   final bool isEdited;
   final ChatMessageDeliveryStatus status;
@@ -64,6 +70,9 @@ class ChatMessage {
     ChatMessageType? type,
     String? replyPreview,
     String? attachmentLabel,
+    String? clientEventId,
+    String? serverEventId,
+    int? sequence,
     bool? isOwn,
     bool? isEdited,
     ChatMessageDeliveryStatus? status,
@@ -79,6 +88,9 @@ class ChatMessage {
       type: type ?? this.type,
       replyPreview: replyPreview ?? this.replyPreview,
       attachmentLabel: attachmentLabel ?? this.attachmentLabel,
+      clientEventId: clientEventId ?? this.clientEventId,
+      serverEventId: serverEventId ?? this.serverEventId,
+      sequence: sequence ?? this.sequence,
       isOwn: isOwn ?? this.isOwn,
       isEdited: isEdited ?? this.isEdited,
       status: status ?? this.status,

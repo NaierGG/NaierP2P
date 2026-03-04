@@ -5,9 +5,10 @@ import type { Message } from "@/shared/types";
 interface MessageBubbleProps {
   message: Message;
   isOwn: boolean;
+  senderLabel?: string;
 }
 
-export default function MessageBubble({ message, isOwn }: MessageBubbleProps) {
+export default function MessageBubble({ message, isOwn, senderLabel }: MessageBubbleProps) {
   return (
     <div className={cn("flex w-full px-2", isOwn ? "justify-end" : "justify-start")}>
       <div
@@ -20,7 +21,7 @@ export default function MessageBubble({ message, isOwn }: MessageBubbleProps) {
       >
         {!isOwn && (
           <p className="mb-0.5 text-xs font-medium text-primary">
-            {message.sender_id.slice(0, 8)}
+            {senderLabel ?? message.sender_id.slice(0, 8)}
           </p>
         )}
 

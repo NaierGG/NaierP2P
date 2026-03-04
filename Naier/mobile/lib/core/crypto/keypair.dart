@@ -35,6 +35,46 @@ class IdentityKeyPair {
   }
 }
 
+class KeyBundle {
+  const KeyBundle({
+    required this.identity,
+    required this.device,
+  });
+
+  final IdentityKeyPair identity;
+  final IdentityKeyPair device;
+
+  Map<String, String> toJson() {
+    return {
+      'identityExchangePublicKey': identity.exchangePublicKey,
+      'identityExchangePrivateKey': identity.exchangePrivateKey,
+      'identitySigningPublicKey': identity.signingPublicKey,
+      'identitySigningPrivateKey': identity.signingPrivateKey,
+      'deviceExchangePublicKey': device.exchangePublicKey,
+      'deviceExchangePrivateKey': device.exchangePrivateKey,
+      'deviceSigningPublicKey': device.signingPublicKey,
+      'deviceSigningPrivateKey': device.signingPrivateKey,
+    };
+  }
+
+  factory KeyBundle.fromJson(Map<String, String> json) {
+    return KeyBundle(
+      identity: IdentityKeyPair(
+        exchangePublicKey: json['identityExchangePublicKey'] ?? '',
+        exchangePrivateKey: json['identityExchangePrivateKey'] ?? '',
+        signingPublicKey: json['identitySigningPublicKey'] ?? '',
+        signingPrivateKey: json['identitySigningPrivateKey'] ?? '',
+      ),
+      device: IdentityKeyPair(
+        exchangePublicKey: json['deviceExchangePublicKey'] ?? '',
+        exchangePrivateKey: json['deviceExchangePrivateKey'] ?? '',
+        signingPublicKey: json['deviceSigningPublicKey'] ?? '',
+        signingPrivateKey: json['deviceSigningPrivateKey'] ?? '',
+      ),
+    );
+  }
+}
+
 class KeyPairService {
   const KeyPairService();
 
@@ -56,6 +96,12 @@ class KeyPairService {
       signingPublicKey: _encode(signingPublic.bytes),
       signingPrivateKey: _encode(signingPrivate),
     );
+  }
+
+  Future<KeyBundle> generateKeyBundle() async {
+    final identity = await generateIdentity();
+    final device = await generateIdentity();
+    return KeyBundle(identity: identity, device: device);
   }
 
   Future<String> signChallenge(String challenge, String signingPrivateKey) async {

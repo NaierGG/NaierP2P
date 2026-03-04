@@ -13,13 +13,14 @@ import (
 )
 
 type MessageService interface {
-	Create(ctx context.Context, userID, channelID uuid.UUID, content, iv string, replyToID *uuid.UUID, clientEventID string) ([]byte, error)
+	Create(ctx context.Context, userID, deviceID, channelID uuid.UUID, content, iv string, replyToID *uuid.UUID, clientEventID string) ([]byte, error)
 	Edit(ctx context.Context, userID, messageID uuid.UUID, content, iv string) (channelID uuid.UUID, event []byte, err error)
 	Delete(ctx context.Context, userID, messageID uuid.UUID) (channelID uuid.UUID, event []byte, err error)
 	AddReaction(ctx context.Context, userID, messageID uuid.UUID, emoji string) (channelID uuid.UUID, event []byte, err error)
 	RemoveReaction(ctx context.Context, userID, messageID uuid.UUID, emoji string) (channelID uuid.UUID, event []byte, err error)
-	MarkRead(ctx context.Context, userID, channelID, messageID uuid.UUID) ([]byte, error)
-	MarkReadSequence(ctx context.Context, userID, channelID uuid.UUID, lastReadSequence int64) ([]byte, error)
+	MarkRead(ctx context.Context, userID, deviceID, channelID, messageID uuid.UUID) ([]byte, error)
+	MarkReadSequence(ctx context.Context, userID, deviceID, channelID uuid.UUID, lastReadSequence int64) ([]byte, error)
+	AckDelivery(ctx context.Context, userID, deviceID, messageID uuid.UUID) error
 }
 
 type PresenceService interface {
@@ -70,6 +71,10 @@ type readAckPayload struct {
 	ChannelID        string `json:"channelId"`
 	MessageID        string `json:"messageId,omitempty"`
 	LastReadSequence int64  `json:"lastReadSequence,omitempty"`
+}
+
+type deliveryAckPayload struct {
+	MessageID string `json:"messageId"`
 }
 
 func NewRouter(hub *Hub, jwtManager *auth.JWTManager, messageService MessageService, presenceService PresenceService) *Router {
@@ -154,6 +159,8 @@ func (r *Router) HandleClientEvent(client *Client, event WSEvent) {
 		r.handlePresenceUpdate(client, event)
 	case EventReadAck:
 		r.handleReadAck(client, event)
+	case EventDeliveryAck:
+		r.handleDeliveryAck(client, event)
 	default:
 		r.sendError(client, event.RequestID, "unsupported_event", "unsupported websocket event type")
 	}
@@ -219,7 +226,7 @@ func (r *Router) handleMessageSend(client *Client, event WSEvent) {
 		replyToID = &parsed
 	}
 
-	responseEvent, err := r.messageService.Create(context.Background(), client.UserID, channelID, payload.Content, payload.IV, replyToID, payload.ClientEventID)
+	responseEvent, err := r.messageService.Create(context.Background(), client.UserID, client.DeviceID, channelID, payload.Content, payload.IV, replyToID, payload.ClientEventID)
 	if err != nil {
 		r.sendError(client, event.RequestID, "message_send_failed", err.Error())
 		return
@@ -421,7 +428,7 @@ func (r *Router) handleReadAck(client *Client, event WSEvent) {
 	}
 
 	if payload.LastReadSequence > 0 {
-		responseEvent, err := r.messageService.MarkReadSequence(context.Background(), client.UserID, channelID, payload.LastReadSequence)
+		responseEvent, err := r.messageService.MarkReadSequence(context.Background(), client.UserID, client.DeviceID, channelID, payload.LastReadSequence)
 		if err != nil {
 			r.sendError(client, event.RequestID, "read_ack_failed", err.Error())
 			return
@@ -438,13 +445,36 @@ func (r *Router) handleReadAck(client *Client, event WSEvent) {
 		return
 	}
 
-	responseEvent, err := r.messageService.MarkRead(context.Background(), client.UserID, channelID, messageID)
+	responseEvent, err := r.messageService.MarkRead(context.Background(), client.UserID, client.DeviceID, channelID, messageID)
 	if err != nil {
 		r.sendError(client, event.RequestID, "read_ack_failed", err.Error())
 		return
 	}
 	if responseEvent != nil {
 		r.hub.BroadcastToChannel(channelID, responseEvent, uuid.Nil)
+	}
+}
+
+func (r *Router) handleDeliveryAck(client *Client, event WSEvent) {
+	if r.messageService == nil {
+		r.sendError(client, event.RequestID, "service_unavailable", "message service unavailable")
+		return
+	}
+
+	var payload deliveryAckPayload
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		r.sendError(client, event.RequestID, "bad_payload", "invalid delivery ack payload")
+		return
+	}
+
+	messageID, err := uuid.Parse(payload.MessageID)
+	if err != nil {
+		r.sendError(client, event.RequestID, "bad_message_id", "invalid message id")
+		return
+	}
+
+	if err := r.messageService.AckDelivery(context.Background(), client.UserID, client.DeviceID, messageID); err != nil {
+		r.sendError(client, event.RequestID, "delivery_ack_failed", err.Error())
 	}
 }
 

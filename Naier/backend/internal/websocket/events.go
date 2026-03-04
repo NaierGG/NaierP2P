@@ -17,6 +17,7 @@ const (
 	EventReaction       = "REACTION"
 	EventPresenceUpdate = "PRESENCE_UPDATE"
 	EventPresence       = "PRESENCE"
+	EventDeliveryAck    = "DELIVERY_ACK"
 	EventChannelJoin    = "CHANNEL_JOIN"
 	EventChannelLeave   = "CHANNEL_LEAVE"
 	EventMemberJoined   = "MEMBER_JOINED"

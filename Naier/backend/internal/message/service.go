@@ -30,7 +30,7 @@ func NewService(repo *Repository, validate *validatorpkg.Validator) *Service {
 
 const globalSyncStreamName = "global"
 
-func (s *Service) ListByChannel(ctx context.Context, channelID, userID uuid.UUID, cursor string, limit int) (ListResponse, error) {
+func (s *Service) ListByChannel(ctx context.Context, channelID, userID, deviceID uuid.UUID, cursor string, limit int) (ListResponse, error) {
 	isMember, err := s.repo.IsChannelMember(ctx, channelID, userID)
 	if err != nil || !isMember {
 		return ListResponse{}, ErrMessageDenied
@@ -49,6 +49,9 @@ func (s *Service) ListByChannel(ctx context.Context, channelID, userID uuid.UUID
 	if err != nil {
 		return ListResponse{}, err
 	}
+	if err := s.repo.MarkMessagesDelivered(ctx, deviceID, collectMessageIDs(messages)); err != nil {
+		return ListResponse{}, err
+	}
 
 	response := ListResponse{
 		Messages: messages,
@@ -61,7 +64,7 @@ func (s *Service) ListByChannel(ctx context.Context, channelID, userID uuid.UUID
 	return response, nil
 }
 
-func (s *Service) CreateHTTP(ctx context.Context, channelID, userID uuid.UUID, req CreateMessageRequest) (MessageDTO, error) {
+func (s *Service) CreateHTTP(ctx context.Context, channelID, userID, deviceID uuid.UUID, req CreateMessageRequest) (MessageDTO, error) {
 	if err := s.validate.Struct(req); err != nil {
 		return MessageDTO{}, err
 	}
@@ -80,7 +83,19 @@ func (s *Service) CreateHTTP(ctx context.Context, channelID, userID uuid.UUID, r
 		replyToID = &parsed
 	}
 
-	return s.repo.Create(ctx, channelID, userID, req.Type, req.Content, req.IV, replyToID, req.Signature, req.ClientEventID)
+	message, err := s.repo.Create(ctx, channelID, userID, req.Type, req.Content, req.IV, replyToID, req.Signature, req.ClientEventID)
+	if err != nil {
+		return MessageDTO{}, err
+	}
+	messageID, err := uuid.Parse(message.ID)
+	if err != nil {
+		return MessageDTO{}, fmt.Errorf("parse created message id: %w", err)
+	}
+	if err := s.repo.EnsureMessageDeliveries(ctx, messageID, channelID, deviceID, message.Sequence); err != nil {
+		return MessageDTO{}, err
+	}
+
+	return message, nil
 }
 
 func (s *Service) UpdateHTTP(ctx context.Context, messageID, userID uuid.UUID, req UpdateMessageRequest) (MessageDTO, error) {
@@ -117,9 +132,16 @@ func (s *Service) DeleteHTTP(ctx context.Context, messageID, userID uuid.UUID) (
 	return s.repo.SoftDelete(ctx, messageID)
 }
 
-func (s *Service) Create(ctx context.Context, userID, channelID uuid.UUID, content, iv string, replyToID *uuid.UUID, clientEventID string) ([]byte, error) {
+func (s *Service) Create(ctx context.Context, userID, deviceID, channelID uuid.UUID, content, iv string, replyToID *uuid.UUID, clientEventID string) ([]byte, error) {
 	message, err := s.repo.Create(ctx, channelID, userID, "text", content, iv, replyToID, "", clientEventID)
 	if err != nil {
+		return nil, err
+	}
+	messageID, err := uuid.Parse(message.ID)
+	if err != nil {
+		return nil, fmt.Errorf("parse created message id: %w", err)
+	}
+	if err := s.repo.EnsureMessageDeliveries(ctx, messageID, channelID, deviceID, message.Sequence); err != nil {
 		return nil, err
 	}
 
@@ -243,7 +265,7 @@ func (s *Service) RemoveReaction(ctx context.Context, userID, messageID uuid.UUI
 	return channelID, event, nil
 }
 
-func (s *Service) MarkRead(ctx context.Context, userID, channelID, messageID uuid.UUID) ([]byte, error) {
+func (s *Service) MarkRead(ctx context.Context, userID, deviceID, channelID, messageID uuid.UUID) ([]byte, error) {
 	isMember, err := s.repo.IsChannelMember(ctx, channelID, userID)
 	if err != nil || !isMember {
 		return nil, ErrMessageDenied
@@ -257,10 +279,10 @@ func (s *Service) MarkRead(ctx context.Context, userID, channelID, messageID uui
 		return nil, err
 	}
 
-	return s.MarkReadSequence(ctx, userID, channelID, lastReadSequence)
+	return s.MarkReadSequence(ctx, userID, deviceID, channelID, lastReadSequence)
 }
 
-func (s *Service) MarkReadSequence(ctx context.Context, userID, channelID uuid.UUID, lastReadSequence int64) ([]byte, error) {
+func (s *Service) MarkReadSequence(ctx context.Context, userID, deviceID, channelID uuid.UUID, lastReadSequence int64) ([]byte, error) {
 	isMember, err := s.repo.IsChannelMember(ctx, channelID, userID)
 	if err != nil || !isMember {
 		return nil, ErrMessageDenied
@@ -268,6 +290,9 @@ func (s *Service) MarkReadSequence(ctx context.Context, userID, channelID uuid.U
 
 	readState, err := s.repo.MarkReadSequence(ctx, channelID, userID, lastReadSequence)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.MarkChannelReadDeliveries(ctx, deviceID, channelID, lastReadSequence); err != nil {
 		return nil, err
 	}
 	if readState == nil {
@@ -303,6 +328,9 @@ func (s *Service) SyncEvents(ctx context.Context, userID, deviceID uuid.UUID, af
 	}
 	if len(events) > 0 {
 		response.LastEventID = events[len(events)-1].EventID
+	}
+	if err := s.repo.MarkMessagesDelivered(ctx, deviceID, collectSyncMessageIDs(events)); err != nil {
+		return SyncResponse{}, err
 	}
 	if response.LastEventID != "" {
 		if err := s.persistOffset(ctx, deviceID, globalSyncStreamName, response.LastEventID); err != nil {
@@ -340,6 +368,9 @@ func (s *Service) SyncChannelEvents(ctx context.Context, userID, deviceID, chann
 	}
 	if len(events) > 0 {
 		response.LastEventID = events[len(events)-1].EventID
+	}
+	if err := s.repo.MarkMessagesDelivered(ctx, deviceID, collectSyncMessageIDs(events)); err != nil {
+		return SyncResponse{}, err
 	}
 	if response.LastEventID != "" {
 		if err := s.persistOffset(ctx, deviceID, streamName, response.LastEventID); err != nil {
@@ -387,6 +418,51 @@ func (s *Service) persistOffset(ctx context.Context, deviceID uuid.UUID, streamN
 
 func channelSyncStreamName(channelID uuid.UUID) string {
 	return fmt.Sprintf("channel:%s", channelID.String())
+}
+
+func (s *Service) MarkDeliveredToDevice(ctx context.Context, deviceID, messageID uuid.UUID) error {
+	return s.repo.MarkMessagesDelivered(ctx, deviceID, []uuid.UUID{messageID})
+}
+
+func (s *Service) AckDelivery(ctx context.Context, userID, deviceID, messageID uuid.UUID) error {
+	if _, _, err := s.repo.GetMessageMeta(ctx, messageID); errors.Is(err, pgx.ErrNoRows) {
+		return ErrMessageNotFound
+	} else if err != nil {
+		return err
+	}
+
+	if err := s.repo.AckMessageDelivery(ctx, deviceID, userID, messageID); errors.Is(err, pgx.ErrNoRows) {
+		return ErrMessageDenied
+	} else if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func collectMessageIDs(messages []MessageDTO) []uuid.UUID {
+	ids := make([]uuid.UUID, 0, len(messages))
+	for _, message := range messages {
+		id, err := uuid.Parse(message.ID)
+		if err == nil {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+func collectSyncMessageIDs(events []SyncEvent) []uuid.UUID {
+	ids := make([]uuid.UUID, 0, len(events))
+	for _, event := range events {
+		if event.Message == nil {
+			continue
+		}
+		id, err := uuid.Parse(event.Message.ID)
+		if err == nil {
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }
 
 func marshalEvent(event appws.WSEvent) ([]byte, error) {

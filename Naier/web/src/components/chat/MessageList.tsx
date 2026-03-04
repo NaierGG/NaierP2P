@@ -10,13 +10,14 @@ import {
 } from "@/app/store/messageSlice";
 import { api } from "@/shared/lib/api";
 import { isLikelyNetworkError, mockListMessages } from "@/shared/lib/mockApi";
-import type { Message } from "@/shared/types";
+import type { ChannelMember, Message } from "@/shared/types";
 import MessageBubble from "@/components/chat/MessageBubble";
 import TypingIndicator from "@/components/chat/TypingIndicator";
 import { Button } from "@/components/ui/button";
 
 interface MessageListProps {
   channelId: string | null;
+  members?: ChannelMember[];
 }
 
 interface MessageListResponse {
@@ -25,7 +26,7 @@ interface MessageListResponse {
   has_more: boolean;
 }
 
-export default function MessageList({ channelId }: MessageListProps) {
+export default function MessageList({ channelId, members = [] }: MessageListProps) {
   const dispatch = useAppDispatch();
   const currentUserId = useAppSelector((state) => state.auth.user?.id ?? null);
   const messages = useAppSelector((state) =>
@@ -52,6 +53,16 @@ export default function MessageList({ channelId }: MessageListProps) {
         message,
       })),
     [messages]
+  );
+  const memberNameById = useMemo(
+    () =>
+      Object.fromEntries(
+        members.map((member) => [
+          member.user_id,
+          member.display_name || member.username || member.user_id,
+        ])
+      ),
+    [members]
   );
 
   // 초기 메시지 로드
@@ -175,6 +186,7 @@ export default function MessageList({ channelId }: MessageListProps) {
               key={row.key}
               message={row.message}
               isOwn={row.message.sender_id === currentUserId}
+              senderLabel={memberNameById[row.message.sender_id]}
             />
           ))}
         </div>
