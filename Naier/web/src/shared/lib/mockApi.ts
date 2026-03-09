@@ -1,4 +1,5 @@
 import type { AxiosError } from "axios";
+import { isMockFallbackEnabled } from "@/shared/lib/runtime";
 
 import type {
   Channel,
@@ -290,6 +291,12 @@ export function isLikelyNetworkError(error: unknown) {
   );
 }
 
+export function shouldUseMockFallback(error: unknown) {
+  return isMockFallbackEnabled() && isLikelyNetworkError(error);
+}
+
+export { isMockFallbackEnabled };
+
 export async function mockRequestChallenge(username: string) {
   const challenge = crypto.randomUUID().replaceAll("-", "");
   storeChallenge(username, challenge);
@@ -304,6 +311,7 @@ export async function mockRegister(payload: {
   displayName: string;
   publicKey: string;
   signature?: string;
+  inviteCode?: string;
 }) {
   const database = loadDatabase();
   const existing = database.users.find(

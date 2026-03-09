@@ -1,10 +1,10 @@
 import { api } from "@/shared/lib/api";
 import {
-  isLikelyNetworkError,
   mockLogin,
   mockRefresh,
   mockRegister,
   mockRequestChallenge,
+  shouldUseMockFallback,
 } from "@/shared/lib/mockApi";
 import type { User } from "@/shared/types";
 
@@ -35,7 +35,7 @@ export async function requestChallenge(payload: {
 
     return response.data;
   } catch (error) {
-    if (!isLikelyNetworkError(error)) {
+    if (!shouldUseMockFallback(error)) {
       throw error;
     }
 
@@ -54,6 +54,7 @@ export async function registerWithKeyPair(payload: {
   identitySignatureOverDevice: string;
   deviceName: string;
   platform: "web";
+  inviteCode?: string;
 }) {
   try {
     const response = await api.post<AuthResponse>("/auth/register", {
@@ -68,11 +69,12 @@ export async function registerWithKeyPair(payload: {
       identity_signature_over_device: payload.identitySignatureOverDevice,
       device_name: payload.deviceName,
       platform: payload.platform,
+      invite_code: payload.inviteCode,
     });
 
     return response.data;
   } catch (error) {
-    if (!isLikelyNetworkError(error)) {
+    if (!shouldUseMockFallback(error)) {
       throw error;
     }
 
@@ -81,6 +83,7 @@ export async function registerWithKeyPair(payload: {
       displayName: payload.displayName,
       publicKey: payload.identitySigningKey,
       signature: payload.deviceSignature,
+      inviteCode: payload.inviteCode,
     });
   }
 }
@@ -105,7 +108,7 @@ export async function loginWithChallenge(payload: {
 
     return response.data;
   } catch (error) {
-    if (!isLikelyNetworkError(error)) {
+    if (!shouldUseMockFallback(error)) {
       throw error;
     }
 
@@ -121,7 +124,7 @@ export async function refreshAuth(refreshToken: string) {
 
     return response.data;
   } catch (error) {
-    if (!isLikelyNetworkError(error)) {
+    if (!shouldUseMockFallback(error)) {
       throw error;
     }
 

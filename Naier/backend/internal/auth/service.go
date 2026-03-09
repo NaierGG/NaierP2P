@@ -23,6 +23,11 @@ var (
 	ErrRefreshRevoked     = errors.New("refresh token revoked")
 	ErrInvalidDevice      = errors.New("invalid device request")
 	ErrBackupNotFound     = errors.New("backup not found")
+	ErrInviteRequired     = errors.New("invite code is required")
+	ErrInviteInvalid      = errors.New("invite code is invalid")
+	ErrInviteExpired      = errors.New("invite code has expired")
+	ErrInviteDisabled     = errors.New("invite code is disabled")
+	ErrInviteExhausted    = errors.New("invite code has reached its usage limit")
 )
 
 type Service struct {
@@ -32,6 +37,7 @@ type Service struct {
 	jwt          *JWTManager
 	challengeTTL time.Duration
 	refreshTTL   time.Duration
+	inviteOnly   bool
 }
 
 type userRecord struct {
@@ -64,7 +70,7 @@ type deviceRecord struct {
 	RevokedAt          *time.Time
 }
 
-func NewService(db *pgxpool.Pool, redisClient *redis.Client, validate *validatorpkg.Validator, jwtManager *JWTManager, refreshTTL time.Duration) *Service {
+func NewService(db *pgxpool.Pool, redisClient *redis.Client, validate *validatorpkg.Validator, jwtManager *JWTManager, refreshTTL time.Duration, inviteOnly bool) *Service {
 	return &Service{
 		db:           db,
 		redis:        redisClient,
@@ -72,6 +78,7 @@ func NewService(db *pgxpool.Pool, redisClient *redis.Client, validate *validator
 		jwt:          jwtManager,
 		challengeTTL: 5 * time.Minute,
 		refreshTTL:   refreshTTL,
+		inviteOnly:   inviteOnly,
 	}
 }
 
@@ -175,6 +182,10 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (AuthRespon
 		Trusted:           true,
 	})
 	if err != nil {
+		return AuthResponse{}, err
+	}
+
+	if err := s.consumeInvite(ctx, tx, strings.TrimSpace(normalizedReq.InviteCode), user.ID); err != nil {
 		return AuthResponse{}, err
 	}
 

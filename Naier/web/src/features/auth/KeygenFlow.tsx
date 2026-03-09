@@ -74,14 +74,14 @@ export default function KeygenFlow() {
 
       <CardContent className="flex flex-col gap-4">
         {step === 1 && (
-          <Button onClick={() => setStep(2)} className="w-full">
+          <Button data-testid="keygen-start" onClick={() => setStep(2)} className="w-full">
             Start
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         )}
 
         {step === 2 && (
-          <Button disabled={loading} onClick={() => void generate()} className="w-full">
+          <Button data-testid="keygen-generate" disabled={loading} onClick={() => void generate()} className="w-full">
             {loading ? "Generating..." : "Generate keys"}
           </Button>
         )}
@@ -113,6 +113,7 @@ export default function KeygenFlow() {
 
             <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-accent p-3">
               <input
+                data-testid="keygen-confirm"
                 type="checkbox"
                 checked={confirmed}
                 onChange={(e) => setConfirmed(e.target.checked)}
@@ -123,7 +124,7 @@ export default function KeygenFlow() {
               </span>
             </label>
 
-            <Button disabled={!confirmed} onClick={() => navigate("/auth/register")} className="w-full">
+            <Button data-testid="keygen-continue" disabled={!confirmed} onClick={() => navigate("/auth/register")} className="w-full">
               Continue to registration
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>

@@ -14,12 +14,15 @@ type Config struct {
 	Auth       AuthConfig       `mapstructure:"auth"`
 	Media      MediaConfig      `mapstructure:"media"`
 	Federation FederationConfig `mapstructure:"federation"`
+	Beta       BetaConfig       `mapstructure:"beta"`
+	Admin      AdminConfig      `mapstructure:"admin"`
 }
 
 type ServerConfig struct {
-	Port string `mapstructure:"port"`
-	Host string `mapstructure:"host"`
-	Mode string `mapstructure:"mode"`
+	Port           string   `mapstructure:"port"`
+	Host           string   `mapstructure:"host"`
+	Mode           string   `mapstructure:"mode"`
+	AllowedOrigins []string `mapstructure:"allowed_origins"`
 }
 
 type DatabaseConfig struct {
@@ -47,6 +50,14 @@ type FederationConfig struct {
 	ServerPrivateKey string `mapstructure:"server_private_key"`
 }
 
+type BetaConfig struct {
+	InviteOnly bool `mapstructure:"invite_only"`
+}
+
+type AdminConfig struct {
+	APIToken string `mapstructure:"api_token"`
+}
+
 func LoadConfig() (*Config, error) {
 	v := viper.New()
 	v.SetConfigName(".env")
@@ -69,6 +80,14 @@ func LoadConfig() (*Config, error) {
 
 	cfg.Auth.JWTExpiry = v.GetDuration("auth.jwt_expiry")
 	cfg.Auth.RefreshExpiry = v.GetDuration("auth.refresh_expiry")
+	cfg.Server.AllowedOrigins = normalizeOrigins(v.GetStringSlice("server.allowed_origins"))
+	if len(cfg.Server.AllowedOrigins) == 0 {
+		cfg.Server.AllowedOrigins = normalizeOrigins(strings.Split(v.GetString("server.allowed_origins"), ","))
+	}
+
+	if err := validateConfig(cfg); err != nil {
+		return nil, err
+	}
 
 	return &cfg, nil
 }
@@ -77,6 +96,12 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.host", "0.0.0.0")
 	v.SetDefault("server.port", "8080")
 	v.SetDefault("server.mode", "release")
+	v.SetDefault("server.allowed_origins", []string{
+		"http://localhost:4173",
+		"http://127.0.0.1:4173",
+		"http://localhost:5173",
+		"http://127.0.0.1:5173",
+	})
 
 	v.SetDefault("database.postgres_dsn", "postgres://mesh:mesh@postgres:5432/naier?sslmode=disable")
 	v.SetDefault("database.redis_addr", "redis:6379")
@@ -94,4 +119,57 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("federation.server_domain", "local.naier")
 	v.SetDefault("federation.server_public_key", "")
 	v.SetDefault("federation.server_private_key", "")
+
+	v.SetDefault("beta.invite_only", false)
+	v.SetDefault("admin.api_token", "")
+}
+
+func normalizeOrigins(origins []string) []string {
+	normalized := make([]string, 0, len(origins))
+	seen := make(map[string]struct{}, len(origins))
+	for _, origin := range origins {
+		trimmed := strings.TrimSpace(origin)
+		if trimmed == "" {
+			continue
+		}
+		if _, exists := seen[trimmed]; exists {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		normalized = append(normalized, trimmed)
+	}
+
+	return normalized
+}
+
+func validateConfig(cfg Config) error {
+	if cfg.Server.Mode != "release" {
+		return nil
+	}
+
+	if strings.TrimSpace(cfg.Auth.JWTSecret) == "" || cfg.Auth.JWTSecret == "change-me-in-production" || cfg.Auth.JWTSecret == "change-me" {
+		return fmt.Errorf("release mode requires a non-default auth.jwt_secret")
+	}
+	if len(cfg.Server.AllowedOrigins) == 0 {
+		return fmt.Errorf("release mode requires server.allowed_origins")
+	}
+	if strings.TrimSpace(cfg.Media.MinIOEndpoint) == "" ||
+		strings.TrimSpace(cfg.Media.MinIOBucket) == "" ||
+		strings.TrimSpace(cfg.Media.MinIOAccessKey) == "" ||
+		strings.TrimSpace(cfg.Media.MinIOSecretKey) == "" {
+		return fmt.Errorf("release mode requires media MinIO endpoint, bucket, access key, and secret key")
+	}
+	if cfg.Media.MinIOAccessKey == "minioadmin" || cfg.Media.MinIOSecretKey == "minioadmin" || cfg.Media.MinIOSecretKey == "minioadmin123" {
+		return fmt.Errorf("release mode requires non-default MinIO credentials")
+	}
+	if strings.TrimSpace(cfg.Federation.ServerDomain) == "" ||
+		strings.TrimSpace(cfg.Federation.ServerPublicKey) == "" ||
+		strings.TrimSpace(cfg.Federation.ServerPrivateKey) == "" {
+		return fmt.Errorf("release mode requires federation server domain and keypair")
+	}
+	if cfg.Beta.InviteOnly && strings.TrimSpace(cfg.Admin.APIToken) == "" {
+		return fmt.Errorf("invite-only beta requires admin.api_token")
+	}
+
+	return nil
 }

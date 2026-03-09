@@ -95,7 +95,7 @@ class MessageBubbleWidget extends StatelessWidget {
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
                                 color:
-                                    theme.colorScheme.surface.withOpacity(0.55),
+                                    theme.colorScheme.surface.withValues(alpha: 0.55),
                                 borderRadius: BorderRadius.circular(16),
                               ),
                               child: Text(
@@ -297,7 +297,7 @@ class _MessageBody extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: theme.colorScheme.surface.withOpacity(0.5),
+            color: theme.colorScheme.surface.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(18),
           ),
           child: Row(

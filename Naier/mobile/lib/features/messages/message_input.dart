@@ -96,7 +96,7 @@ class _MessageInputWidgetState extends State<MessageInputWidget> {
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
         decoration: BoxDecoration(
-          color: theme.colorScheme.surface.withOpacity(0.96),
+          color: theme.colorScheme.surface.withValues(alpha: 0.96),
           border: Border(
             top: BorderSide(
               color: theme.colorScheme.outlineVariant,

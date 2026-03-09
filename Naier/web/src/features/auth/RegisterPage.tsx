@@ -19,6 +19,7 @@ export default function RegisterPage() {
   const { loadKeyPair, signLoginChallenge } = useEncryption();
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [hasKeyPair, setHasKeyPair] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +74,7 @@ export default function RegisterPage() {
         identitySignatureOverDevice,
         deviceName: "Web browser",
         platform: "web",
+        inviteCode: inviteCode.trim(),
       });
 
       dispatch(setKeyPair(existingKeyPair));
@@ -105,15 +107,23 @@ export default function RegisterPage() {
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <Input
+          data-testid="register-username"
           onChange={(e) => setUsername(e.target.value)}
           placeholder="Username"
           value={username}
           autoFocus
         />
         <Input
+          data-testid="register-display-name"
           onChange={(e) => setDisplayName(e.target.value)}
           placeholder="Display name"
           value={displayName}
+        />
+        <Input
+          data-testid="register-invite-code"
+          onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+          placeholder="Invite code (required for beta)"
+          value={inviteCode}
         />
         {!hasKeyPair && (
           <div className="flex items-center gap-2 rounded-xl bg-accent p-3">
@@ -128,6 +138,7 @@ export default function RegisterPage() {
         )}
         {error && <p className="text-sm text-destructive">{error}</p>}
         <Button
+          data-testid="register-submit"
           disabled={!hasKeyPair || loading}
           onClick={() => void handleRegister()}
           className="w-full"

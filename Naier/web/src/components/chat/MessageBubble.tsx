@@ -10,7 +10,10 @@ interface MessageBubbleProps {
 
 export default function MessageBubble({ message, isOwn, senderLabel }: MessageBubbleProps) {
   return (
-    <div className={cn("flex w-full px-2", isOwn ? "justify-end" : "justify-start")}>
+    <div
+      data-testid="chat-message-bubble"
+      className={cn("flex w-full px-2", isOwn ? "justify-end" : "justify-start")}
+    >
       <div
         className={cn(
           "max-w-[70%] rounded-2xl px-4 py-2.5",

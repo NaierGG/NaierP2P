@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/models/session.dart';
 import '../storage/secure_storage.dart';
+import 'runtime_config.dart';
 import 'sync_client.dart';
 import 'websocket_client.dart';
 
@@ -17,15 +18,14 @@ final authSessionProvider =
 });
 
 final dioProvider = Provider<Dio>((ref) {
-  final storage = ref.watch(storageProvider);
   final controller = ref.watch(authSessionProvider.notifier);
+  const configuredApiBaseUrl = String.fromEnvironment('MESH_API_BASE_URL');
+  final apiBaseUrl =
+      configuredApiBaseUrl.isNotEmpty ? configuredApiBaseUrl : defaultApiBaseUrl();
 
   final dio = Dio(
     BaseOptions(
-      baseUrl: const String.fromEnvironment(
-        'MESH_API_BASE_URL',
-        defaultValue: 'http://10.0.2.2:8080/api/v1',
-      ),
+      baseUrl: apiBaseUrl,
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
       headers: {'Content-Type': 'application/json'},
@@ -89,13 +89,13 @@ final dioProvider = Provider<Dio>((ref) {
 });
 
 final wsBaseUrlProvider = Provider<String>((ref) {
+  const configuredWsBaseUrl = String.fromEnvironment('MESH_WS_BASE_URL');
+  if (configuredWsBaseUrl.isNotEmpty) {
+    return configuredWsBaseUrl;
+  }
+
   final apiBaseUrl = ref.watch(dioProvider).options.baseUrl;
-  final baseUri = Uri.parse(apiBaseUrl);
-  final scheme = baseUri.scheme == 'https' ? 'wss' : 'ws';
-  final basePath = baseUri.path.replaceFirst(RegExp(r'/api/v1/?$'), '');
-  return baseUri
-      .replace(scheme: scheme, path: '$basePath/ws')
-      .toString();
+  return defaultWsBaseUrl(apiBaseUrl);
 });
 
 final syncClientProvider = Provider<MeshSyncClient>((ref) {

@@ -45,6 +45,12 @@ jobs:
       - name: Build web client
         run: npm run build
 
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run web smoke e2e
+        run: npm run test:e2e
+
   mobile:
     runs-on: ubuntu-latest
     defaults:
@@ -65,16 +71,76 @@ jobs:
       - name: Analyze mobile client
         run: flutter analyze
 
+  integration:
+    runs-on: ubuntu-latest
+    needs: [backend, web]
+    env:
+      MESH_BETA_INVITE_ONLY: "true"
+      MESH_ADMIN_API_TOKEN: ci-admin-token
+      PLAYWRIGHT_ADMIN_TOKEN: ci-admin-token
+      VITE_API_BASE_URL: http://127.0.0.1:8080/api/v1
+      VITE_ENABLE_MOCK_FALLBACK: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Start backend stack
+        working-directory: backend
+        run: docker compose up -d postgres redis postgres-remote redis-remote
+
+      - name: Run migrations
+        working-directory: backend
+        run: |
+          docker compose run --rm --entrypoint /app/migrate backend up
+          docker compose run --rm --entrypoint /app/migrate backend-remote up
+
+      - name: Start backend services
+        working-directory: backend
+        run: docker compose up -d --build backend backend-remote
+
+      - name: Run backend integration smoke
+        working-directory: backend
+        run: go run ./cmd/integration-smoke
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      - name: Run live web smoke
+        working-directory: web
+        run: npm run test:e2e:live
+
+      - name: Stop backend stack
+        if: always()
+        working-directory: backend
+        run: docker compose down -v
+
   deploy:
     runs-on: ubuntu-latest
-    needs: [backend, web, mobile]
+    needs: [backend, web, mobile, integration]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     defaults:
       run:
         working-directory: .
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      MESH_SERVER_ALLOWED_ORIGINS: ${{ secrets.MESH_SERVER_ALLOWED_ORIGINS }}
       MESH_AUTH_JWT_SECRET: ${{ secrets.MESH_AUTH_JWT_SECRET }}
+      MESH_BETA_INVITE_ONLY: ${{ secrets.MESH_BETA_INVITE_ONLY }}
+      MESH_ADMIN_API_TOKEN: ${{ secrets.MESH_ADMIN_API_TOKEN }}
       MESH_DATABASE_POSTGRES_DSN: ${{ secrets.MESH_DATABASE_POSTGRES_DSN }}
       MESH_DATABASE_REDIS_ADDR: ${{ secrets.MESH_DATABASE_REDIS_ADDR }}
       MESH_DATABASE_REDIS_PASSWORD: ${{ secrets.MESH_DATABASE_REDIS_PASSWORD }}
@@ -98,7 +164,10 @@ jobs:
       - name: Sync Fly secrets
         run: |
           flyctl secrets set \
+            MESH_SERVER_ALLOWED_ORIGINS="$MESH_SERVER_ALLOWED_ORIGINS" \
             MESH_AUTH_JWT_SECRET="$MESH_AUTH_JWT_SECRET" \
+            MESH_BETA_INVITE_ONLY="$MESH_BETA_INVITE_ONLY" \
+            MESH_ADMIN_API_TOKEN="$MESH_ADMIN_API_TOKEN" \
             MESH_DATABASE_POSTGRES_DSN="$MESH_DATABASE_POSTGRES_DSN" \
             MESH_DATABASE_REDIS_ADDR="$MESH_DATABASE_REDIS_ADDR" \
             MESH_DATABASE_REDIS_PASSWORD="$MESH_DATABASE_REDIS_PASSWORD" \
@@ -109,10 +178,48 @@ jobs:
             MESH_FEDERATION_SERVER_DOMAIN="$MESH_FEDERATION_SERVER_DOMAIN" \
             MESH_FEDERATION_SERVER_PUBLIC_KEY="$MESH_FEDERATION_SERVER_PUBLIC_KEY" \
             MESH_FEDERATION_SERVER_PRIVATE_KEY="$MESH_FEDERATION_SERVER_PRIVATE_KEY" \
-            --app mesh-chat-api
+            --app naier-api
 
       - name: Deploy to Fly.io
         run: flyctl deploy --config infra/fly.toml --remote-only
 
       - name: Verify migration status
-        run: flyctl ssh console --app mesh-chat-api -C "/app/migrate status"
+        run: flyctl ssh console --app naier-api -C "/app/migrate status"
+
+      - name: Smoke deployed health
+        run: curl -fsS https://naier-api.fly.dev/health
+
+  deploy-web:
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.WEB_VERCEL_TOKEN != '' && secrets.WEB_VERCEL_ORG_ID != '' && secrets.WEB_VERCEL_PROJECT_ID != '' && secrets.WEB_VITE_API_BASE_URL != '' && secrets.WEB_VITE_WS_URL != ''
+    defaults:
+      run:
+        working-directory: web
+    env:
+      VERCEL_TOKEN: ${{ secrets.WEB_VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.WEB_VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.WEB_VERCEL_PROJECT_ID }}
+      VITE_API_BASE_URL: ${{ secrets.WEB_VITE_API_BASE_URL }}
+      VITE_WS_URL: ${{ secrets.WEB_VITE_WS_URL }}
+      VITE_ENABLE_MOCK_FALLBACK: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        run: npm ci
+
+      - name: Pull Vercel project metadata
+        run: npx vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
+
+      - name: Build web deployment artifact
+        run: npx vercel build --prod --token "$VERCEL_TOKEN"
+
+      - name: Deploy web to Vercel
+        run: npx vercel deploy --prebuilt --prod --token "$VERCEL_TOKEN"

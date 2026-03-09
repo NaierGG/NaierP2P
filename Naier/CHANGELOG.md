@@ -37,6 +37,26 @@
 - local development compose now includes an isolated `backend-remote` federation peer with its own Postgres and Redis services
 - resolver now prefers cached/database federation endpoints instead of falling back to DNS-derived defaults during push and pull
 - backend now has regression tests for auth access-token enforcement and federation TXT/signature helper paths
+- web now has Playwright Chromium smoke coverage for key generation, registration, settings navigation, and new-device onboarding
+- web now has a separate `@live` Playwright smoke path for registration and settings navigation against a running backend
+- Playwright mock coverage now includes chat send flow and backup-driven device approval end-to-end
+- mobile runtime config now auto-selects emulator-friendly API defaults and supports explicit API/WS overrides via dart defines
+- backend now supports invite-only beta registration with invite issuance, redemption tracking, and disablement
+- backend now exposes admin-only invite management endpoints guarded by `X-Admin-Token`
+- release-mode backend boot now validates allowed origins, JWT secret, MinIO credentials, federation keys, and invite admin token requirements
+- backend CORS is now allowlist-based via `MESH_SERVER_ALLOWED_ORIGINS`
+- web registration now supports invite codes
+- web production runtime now requires `VITE_API_BASE_URL`
+- web mock fallback is now controlled by `VITE_ENABLE_MOCK_FALLBACK` and defaults to off in production builds
+- channel and message loading now surface explicit runtime errors instead of silently falling through in production
+- web now ships a Vercel-compatible SPA rewrite file and production env example
+- backend and infra now ship production env examples for closed beta deployment
+- CI now runs Playwright smoke on every web build and includes a backend integration job placeholder for invite-only/live validation
+- live Playwright smoke now covers invite-only registration and real-backend channel message send
+- production nginx is now rendered from `API_DOMAIN` and the API compose stack now requires real secrets instead of placeholder defaults
+- Fly deployment config now keeps one machine warm to avoid beta cold starts
+- GitHub Actions can now optionally deploy the static web app to Vercel when the web deployment secrets are configured
+- mobile registration now accepts invite codes and uses runtime platform metadata so invite-only beta servers stay API-compatible with the Flutter client
 
 ### Planned compatibility work in progress
 

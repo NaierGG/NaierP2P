@@ -3,17 +3,17 @@ import { ArrowDown, MessageSquare } from "lucide-react";
 
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import {
-  setLastServerEventId,
-  setPagination,
-  setMessagesForChannel,
   prependMessages,
+  setLastServerEventId,
+  setMessagesForChannel,
+  setPagination,
 } from "@/app/store/messageSlice";
-import { api } from "@/shared/lib/api";
-import { isLikelyNetworkError, mockListMessages } from "@/shared/lib/mockApi";
-import type { ChannelMember, Message } from "@/shared/types";
 import MessageBubble from "@/components/chat/MessageBubble";
 import TypingIndicator from "@/components/chat/TypingIndicator";
 import { Button } from "@/components/ui/button";
+import { api } from "@/shared/lib/api";
+import { mockListMessages, shouldUseMockFallback } from "@/shared/lib/mockApi";
+import type { ChannelMember, Message } from "@/shared/types";
 
 interface MessageListProps {
   channelId: string | null;
@@ -45,6 +45,7 @@ export default function MessageList({ channelId, members = [] }: MessageListProp
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [loading, setLoading] = useState(false);
   const [showJump, setShowJump] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const rows = useMemo(
     () =>
@@ -65,7 +66,6 @@ export default function MessageList({ channelId, members = [] }: MessageListProp
     [members]
   );
 
-  // 초기 메시지 로드
   useEffect(() => {
     if (!channelId) return;
     let cancelled = false;
@@ -75,23 +75,28 @@ export default function MessageList({ channelId, members = [] }: MessageListProp
       try {
         let response: MessageListResponse;
         try {
-          const remote = await api.get<MessageListResponse>(
-            `/channels/${channelId}/messages`,
-            { params: { limit: 40 } }
-          );
+          const remote = await api.get<MessageListResponse>(`/channels/${channelId}/messages`, {
+            params: { limit: 40 },
+          });
           response = remote.data;
         } catch (error) {
-          if (!isLikelyNetworkError(error)) throw error;
+          if (!shouldUseMockFallback(error)) {
+            if (!cancelled) {
+              setLoadError(error instanceof Error ? error.message : "Failed to load messages.");
+            }
+            return;
+          }
           response = await mockListMessages({ channelId, limit: 40 });
         }
         if (cancelled) return;
 
+        setLoadError(null);
         const ordered = [...response.messages].reverse();
         dispatch(setMessagesForChannel({ channelId, messages: ordered }));
-        const latestEventId = [...ordered]
-          .reverse()
-          .find((m) => m.server_event_id)?.server_event_id;
-        if (latestEventId) dispatch(setLastServerEventId(latestEventId));
+        const latestEventID = [...ordered].reverse().find((message) => message.server_event_id)?.server_event_id;
+        if (latestEventID) {
+          dispatch(setLastServerEventId(latestEventID));
+        }
         dispatch(
           setPagination({
             channelId,
@@ -100,15 +105,18 @@ export default function MessageList({ channelId, members = [] }: MessageListProp
           })
         );
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     void loadInitial();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [channelId, dispatch]);
 
-  // 무한 스크롤 — 위로 스크롤 시 이전 메시지 로드
   useEffect(() => {
     if (!channelId || !hasMore || !cursor || !scrollRef.current || loading) return;
 
@@ -117,19 +125,23 @@ export default function MessageList({ channelId, members = [] }: MessageListProp
       if (element.scrollTop > 120 || loading) return;
 
       setLoading(true);
-      const prevHeight = element.scrollHeight;
+      const previousHeight = element.scrollHeight;
       try {
         let response: MessageListResponse;
         try {
-          const remote = await api.get<MessageListResponse>(
-            `/channels/${channelId}/messages`,
-            { params: { cursor, limit: 30 } }
-          );
+          const remote = await api.get<MessageListResponse>(`/channels/${channelId}/messages`, {
+            params: { cursor, limit: 30 },
+          });
           response = remote.data;
         } catch (error) {
-          if (!isLikelyNetworkError(error)) throw error;
+          if (!shouldUseMockFallback(error)) {
+            setLoadError(error instanceof Error ? error.message : "Failed to load older messages.");
+            return;
+          }
           response = await mockListMessages({ channelId, cursor, limit: 30 });
         }
+
+        setLoadError(null);
         const ordered = [...response.messages].reverse();
         dispatch(prependMessages({ channelId, messages: ordered }));
         dispatch(
@@ -141,7 +153,7 @@ export default function MessageList({ channelId, members = [] }: MessageListProp
         );
 
         requestAnimationFrame(() => {
-          element.scrollTop += element.scrollHeight - prevHeight;
+          element.scrollTop += element.scrollHeight - previousHeight;
         });
       } finally {
         setLoading(false);
@@ -152,18 +164,17 @@ export default function MessageList({ channelId, members = [] }: MessageListProp
     return () => element.removeEventListener("scroll", onScroll);
   }, [channelId, cursor, dispatch, hasMore, loading]);
 
-  // 새 메시지 도착 시 하단 고정
   useLayoutEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
+    const element = scrollRef.current;
+    if (!element) return;
 
-    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
-    const stick = dist < 180;
-    setShowJump(!stick);
+    const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+    const stickToBottom = distanceFromBottom < 180;
+    setShowJump(!stickToBottom);
 
-    if (stick) {
+    if (stickToBottom) {
       requestAnimationFrame(() => {
-        el.scrollTop = el.scrollHeight;
+        element.scrollTop = element.scrollHeight;
       });
     }
   }, [messages.length, channelId]);
@@ -172,15 +183,20 @@ export default function MessageList({ channelId, members = [] }: MessageListProp
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
         <MessageSquare className="h-12 w-12 opacity-30" />
-        <p className="text-sm">채널을 선택하면 대화가 시작됩니다</p>
+        <p className="text-sm">Select a channel to start chatting.</p>
       </div>
     );
   }
 
   return (
-    <div className="relative flex flex-1 flex-col min-h-0">
+    <div className="relative flex min-h-0 flex-1 flex-col">
       <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-4">
         <div className="flex flex-col gap-1.5">
+          {loadError && (
+            <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {loadError}
+            </p>
+          )}
           {rows.map((row) => (
             <MessageBubble
               key={row.key}
@@ -206,7 +222,7 @@ export default function MessageList({ channelId, members = [] }: MessageListProp
           className="absolute bottom-14 right-4 gap-1.5 shadow-lg"
         >
           <ArrowDown className="h-3.5 w-3.5" />
-          최신 메시지
+          Latest messages
         </Button>
       )}
     </div>

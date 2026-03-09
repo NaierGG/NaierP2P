@@ -183,6 +183,7 @@ export default function DeviceLinkPage() {
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">Username</label>
             <Input
+              data-testid="device-link-username"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
               placeholder="username"
@@ -191,6 +192,7 @@ export default function DeviceLinkPage() {
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">Backup passphrase</label>
             <Input
+              data-testid="device-link-passphrase"
               type="password"
               value={passphrase}
               onChange={(event) => setPassphrase(event.target.value)}
@@ -202,6 +204,7 @@ export default function DeviceLinkPage() {
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium">Encrypted backup blob</label>
           <Textarea
+            data-testid="device-link-backup-blob"
             rows={8}
             className="font-mono text-xs"
             value={backupBlob}
@@ -211,11 +214,16 @@ export default function DeviceLinkPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button disabled={loading} onClick={() => void prepareDevice()}>
+          <Button data-testid="device-link-prepare" disabled={loading} onClick={() => void prepareDevice()}>
             <KeyRound className="mr-2 h-4 w-4" />
             Prepare this device
           </Button>
-          <Button disabled={!preparedBundle || loading} variant="secondary" onClick={() => void completeSignIn()}>
+          <Button
+            data-testid="device-link-complete"
+            disabled={!preparedBundle || loading}
+            variant="secondary"
+            onClick={() => void completeSignIn()}
+          >
             Complete sign-in
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
@@ -224,6 +232,7 @@ export default function DeviceLinkPage() {
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium">Pairing payload for the trusted device</label>
           <Textarea
+            data-testid="device-link-pairing-payload"
             readOnly
             rows={6}
             className="font-mono text-xs"

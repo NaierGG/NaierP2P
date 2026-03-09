@@ -12,9 +12,17 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/nginx.conf.template:/etc/nginx/templates/nginx.conf.template:ro
       - certbot-webroot:/var/www/certbot
       - certbot-etc:/etc/letsencrypt
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        envsubst '$$API_DOMAIN' < /etc/nginx/templates/nginx.conf.template > /etc/nginx/nginx.conf
+        exec nginx -g 'daemon off;'
     restart: unless-stopped
 
   backend-1:
@@ -25,19 +33,22 @@ services:
       MESH_SERVER_HOST: 0.0.0.0
       MESH_SERVER_PORT: 8080
       MESH_SERVER_MODE: release
+      MESH_SERVER_ALLOWED_ORIGINS: ${MESH_SERVER_ALLOWED_ORIGINS:?set MESH_SERVER_ALLOWED_ORIGINS}
       MESH_DATABASE_POSTGRES_DSN: postgres://mesh:${POSTGRES_PASSWORD:-mesh}@postgres:5432/naier?sslmode=disable
       MESH_DATABASE_REDIS_ADDR: redis:6379
       MESH_DATABASE_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      MESH_AUTH_JWT_SECRET: ${MESH_AUTH_JWT_SECRET:-change-me}
+      MESH_AUTH_JWT_SECRET: ${MESH_AUTH_JWT_SECRET:?set MESH_AUTH_JWT_SECRET}
       MESH_AUTH_JWT_EXPIRY: 15m
       MESH_AUTH_REFRESH_EXPIRY: 720h
+      MESH_BETA_INVITE_ONLY: ${MESH_BETA_INVITE_ONLY:-true}
+      MESH_ADMIN_API_TOKEN: ${MESH_ADMIN_API_TOKEN:?set MESH_ADMIN_API_TOKEN}
       MESH_MEDIA_MINIO_ENDPOINT: minio:9000
-      MESH_MEDIA_MINIO_BUCKET: ${MINIO_BUCKET:-naier}
-      MESH_MEDIA_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-      MESH_MEDIA_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
-      MESH_FEDERATION_SERVER_DOMAIN: ${MESH_FEDERATION_SERVER_DOMAIN:-naier.example.com}
-      MESH_FEDERATION_SERVER_PUBLIC_KEY: ${MESH_FEDERATION_SERVER_PUBLIC_KEY:-}
-      MESH_FEDERATION_SERVER_PRIVATE_KEY: ${MESH_FEDERATION_SERVER_PRIVATE_KEY:-}
+      MESH_MEDIA_MINIO_BUCKET: ${MINIO_BUCKET:?set MINIO_BUCKET}
+      MESH_MEDIA_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      MESH_MEDIA_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+      MESH_FEDERATION_SERVER_DOMAIN: ${MESH_FEDERATION_SERVER_DOMAIN:?set MESH_FEDERATION_SERVER_DOMAIN}
+      MESH_FEDERATION_SERVER_PUBLIC_KEY: ${MESH_FEDERATION_SERVER_PUBLIC_KEY:?set MESH_FEDERATION_SERVER_PUBLIC_KEY}
+      MESH_FEDERATION_SERVER_PRIVATE_KEY: ${MESH_FEDERATION_SERVER_PRIVATE_KEY:?set MESH_FEDERATION_SERVER_PRIVATE_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -80,7 +91,7 @@ services:
     environment:
       POSTGRES_DB: naier
       POSTGRES_USER: mesh
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mesh}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -96,7 +107,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      PGPASSWORD: ${POSTGRES_PASSWORD:-mesh}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
     volumes:
       - postgres-backups:/backups
     command:
@@ -135,8 +146,8 @@ services:
     image: minio/minio:RELEASE.2024-12-18T13-15-44Z
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
     volumes:
       - minio-data:/data
     healthcheck:

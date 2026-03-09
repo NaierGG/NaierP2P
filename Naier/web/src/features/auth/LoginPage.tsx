@@ -82,6 +82,7 @@ export default function LoginPage() {
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <Input
+          data-testid="login-username"
           onChange={(e) => setUsername(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") void handleLogin();
@@ -91,7 +92,7 @@ export default function LoginPage() {
           autoFocus
         />
         {error && <p className="text-sm text-destructive">{error}</p>}
-        <Button disabled={loading} onClick={() => void handleLogin()} className="w-full">
+        <Button data-testid="login-submit" disabled={loading} onClick={() => void handleLogin()} className="w-full">
           {loading ? "Signing in..." : "Log in"}
         </Button>
         <div className="flex flex-col gap-2 text-center text-sm text-muted-foreground">

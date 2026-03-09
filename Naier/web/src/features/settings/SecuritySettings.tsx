@@ -107,9 +107,13 @@ export default function SecuritySettings() {
       const encryptedBackup = await encryptKeyBundleBackup(keyPair, backupPassphrase);
       await exportEncryptedBackup(accessToken, encryptedBackup);
       const serialized = JSON.stringify(encryptedBackup, null, 2);
-      await navigator.clipboard.writeText(serialized);
       setRestoreBlobInput(serialized);
-      setNotice("Encrypted backup exported and copied to the clipboard.");
+      try {
+        await navigator.clipboard.writeText(serialized);
+        setNotice("Encrypted backup exported and copied to the clipboard.");
+      } catch {
+        setNotice("Encrypted backup exported. Clipboard access was not available in this browser.");
+      }
       setError(null);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Failed to export encrypted backup.");
@@ -321,12 +325,13 @@ export default function SecuritySettings() {
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium">Export passphrase</label>
               <Input
+                data-testid="backup-export-passphrase"
                 type="password"
                 value={backupPassphrase}
                 onChange={(event) => setBackupPassphrase(event.target.value)}
                 placeholder="Enter a strong backup passphrase"
               />
-              <Button size="sm" onClick={() => void handleExportBackup()}>
+              <Button data-testid="backup-export-submit" size="sm" onClick={() => void handleExportBackup()}>
                 <Download className="mr-2 h-3.5 w-3.5" />
                 Export encrypted backup
               </Button>
@@ -335,6 +340,7 @@ export default function SecuritySettings() {
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium">Restore passphrase</label>
               <Input
+                data-testid="backup-restore-passphrase"
                 type="password"
                 value={restorePassphrase}
                 onChange={(event) => setRestorePassphrase(event.target.value)}
@@ -344,7 +350,7 @@ export default function SecuritySettings() {
                 <Button size="sm" variant="secondary" onClick={() => void handleLoadStoredBackup()}>
                   Load stored backup
                 </Button>
-                <Button size="sm" onClick={() => void handleRestoreBackup()}>
+                <Button data-testid="backup-restore-submit" size="sm" onClick={() => void handleRestoreBackup()}>
                   <Upload className="mr-2 h-3.5 w-3.5" />
                   Restore to this device
                 </Button>
@@ -357,6 +363,7 @@ export default function SecuritySettings() {
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">Encrypted backup blob</label>
             <Textarea
+              data-testid="backup-blob-input"
               rows={8}
               className="font-mono text-xs"
               placeholder="Encrypted backup JSON"
@@ -386,11 +393,12 @@ export default function SecuritySettings() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <Button size="sm" variant="secondary" onClick={() => void generatePairingPayload()}>
+          <Button data-testid="device-pairing-generate" size="sm" variant="secondary" onClick={() => void generatePairingPayload()}>
             Generate pairing payload
           </Button>
 
           <Textarea
+            data-testid="device-pairing-input"
             rows={6}
             className="font-mono text-xs"
             placeholder="Paste a pairing payload JSON blob"
@@ -399,13 +407,13 @@ export default function SecuritySettings() {
           />
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" onClick={() => void handleRegisterAndApproveDevice()}>
+            <Button data-testid="device-pairing-register-approve" size="sm" onClick={() => void handleRegisterAndApproveDevice()}>
               Register and approve
             </Button>
-            <Button size="sm" variant="outline" onClick={() => void handleRegisterPendingDevice()}>
+            <Button data-testid="device-pairing-register-pending" size="sm" variant="outline" onClick={() => void handleRegisterPendingDevice()}>
               Register pending device
             </Button>
-            <Button size="sm" variant="secondary" onClick={() => void handleApprovePendingDevice()}>
+            <Button data-testid="device-pairing-approve-pending" size="sm" variant="secondary" onClick={() => void handleApprovePendingDevice()}>
               Approve pending device
             </Button>
             {pendingDeviceId && <Badge variant="secondary">Pending: {pendingDeviceId}</Badge>}
@@ -448,7 +456,7 @@ export default function SecuritySettings() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary">Pending</Badge>
-                    <Button size="sm" onClick={() => void handleApproveSpecificDevice(device.id)}>
+                    <Button data-testid={`approve-device-${device.id}`} size="sm" onClick={() => void handleApproveSpecificDevice(device.id)}>
                       Approve
                     </Button>
                   </div>

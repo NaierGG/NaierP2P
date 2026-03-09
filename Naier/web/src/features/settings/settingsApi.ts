@@ -1,6 +1,5 @@
 import { api } from "@/shared/lib/api";
 import {
-  isLikelyNetworkError,
   mockApproveDevice,
   mockExportBackup,
   mockImportBackup,
@@ -9,6 +8,7 @@ import {
   mockListDevices,
   mockRevokeDevice,
   mockUpdateProfile,
+  shouldUseMockFallback,
 } from "@/shared/lib/mockApi";
 import type { Device, User } from "@/shared/types";
 import type { EncryptedBackupBlob } from "@/shared/lib/crypto";
@@ -41,7 +41,7 @@ export async function fetchProfile(accessToken: string | null) {
     const response = await api.get<ProfileResponse>("/auth/me");
     return response.data;
   } catch (error) {
-    if (!isLikelyNetworkError(error) || !accessToken) {
+    if (!shouldUseMockFallback(error) || !accessToken) {
       throw error;
     }
 
@@ -57,7 +57,7 @@ export async function updateProfile(
     const response = await api.put<ProfileResponse>("/auth/me", payload);
     return response.data;
   } catch (error) {
-    if (!isLikelyNetworkError(error) || !accessToken) {
+    if (!shouldUseMockFallback(error) || !accessToken) {
       throw error;
     }
 
@@ -70,7 +70,7 @@ export async function fetchDevices(accessToken: string | null) {
     const response = await api.get<DevicesResponse>("/auth/devices");
     return response.data;
   } catch (error) {
-    if (!isLikelyNetworkError(error) || !accessToken) {
+    if (!shouldUseMockFallback(error) || !accessToken) {
       throw error;
     }
 
@@ -82,7 +82,7 @@ export async function revokeDevice(accessToken: string | null, deviceId: string)
   try {
     await api.delete(`/auth/devices/${deviceId}`);
   } catch (error) {
-    if (!isLikelyNetworkError(error) || !accessToken) {
+    if (!shouldUseMockFallback(error) || !accessToken) {
       throw error;
     }
 
@@ -103,7 +103,7 @@ export async function createPendingDevice(
     const response = await api.post<DeviceResponse>("/auth/devices/pending", payload);
     return response.data;
   } catch (error) {
-    if (!isLikelyNetworkError(error) || !accessToken) {
+    if (!shouldUseMockFallback(error) || !accessToken) {
       throw error;
     }
 
@@ -117,7 +117,7 @@ export async function approveDevice(accessToken: string | null, deviceId: string
       device_id: deviceId,
     });
   } catch (error) {
-    if (!isLikelyNetworkError(error) || !accessToken) {
+    if (!shouldUseMockFallback(error) || !accessToken) {
       throw error;
     }
 
@@ -136,7 +136,7 @@ export async function exportEncryptedBackup(
     });
     return response.data;
   } catch (error) {
-    if (!isLikelyNetworkError(error) || !accessToken) {
+    if (!shouldUseMockFallback(error) || !accessToken) {
       throw error;
     }
 
@@ -152,7 +152,7 @@ export async function importEncryptedBackup(accessToken: string | null) {
       parsed: JSON.parse(response.data.backup_blob) as EncryptedBackupBlob,
     };
   } catch (error) {
-    if (!isLikelyNetworkError(error) || !accessToken) {
+    if (!shouldUseMockFallback(error) || !accessToken) {
       throw error;
     }
 

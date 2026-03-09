@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/crypto/keypair.dart';
 import '../../core/network/api_client.dart';
+import '../../core/network/runtime_config.dart';
 import '../../shared/models/session.dart';
 
 class KeygenScreen extends ConsumerStatefulWidget {
@@ -17,6 +18,7 @@ class KeygenScreen extends ConsumerStatefulWidget {
 class _KeygenScreenState extends ConsumerState<KeygenScreen> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _displayNameController = TextEditingController();
+  final TextEditingController _inviteCodeController = TextEditingController();
   bool _submitting = false;
   String? _error;
 
@@ -24,6 +26,7 @@ class _KeygenScreenState extends ConsumerState<KeygenScreen> {
   void dispose() {
     _usernameController.dispose();
     _displayNameController.dispose();
+    _inviteCodeController.dispose();
     super.dispose();
   }
 
@@ -56,6 +59,15 @@ class _KeygenScreenState extends ConsumerState<KeygenScreen> {
                 hintText: 'Naier',
               ),
             ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _inviteCodeController,
+              decoration: const InputDecoration(
+                labelText: 'Invite code',
+                hintText: 'Required on invite-only servers',
+              ),
+              textCapitalization: TextCapitalization.characters,
+            ),
             const SizedBox(height: 16),
             if (_error != null)
               Padding(
@@ -78,6 +90,7 @@ class _KeygenScreenState extends ConsumerState<KeygenScreen> {
   Future<void> _generateAndRegister() async {
     final username = _usernameController.text.trim();
     final displayName = _displayNameController.text.trim();
+    final inviteCode = _inviteCodeController.text.trim().toUpperCase();
     if (username.isEmpty || displayName.isEmpty) {
       setState(() => _error = 'Username and display name are required.');
       return;
@@ -92,6 +105,7 @@ class _KeygenScreenState extends ConsumerState<KeygenScreen> {
     final storage = ref.read(storageProvider);
     final auth = ref.read(authSessionProvider.notifier);
     final keys = const KeyPairService();
+    final platform = currentClientPlatform();
 
     try {
       final bundle = await keys.generateKeyBundle();
@@ -101,7 +115,7 @@ class _KeygenScreenState extends ConsumerState<KeygenScreen> {
           'username': username,
           'device_signing_key': bundle.device.signingPublicKey,
           'device_name': 'Naier mobile',
-          'platform': 'android',
+          'platform': platform,
         },
       );
 
@@ -131,7 +145,8 @@ class _KeygenScreenState extends ConsumerState<KeygenScreen> {
           'device_signature': deviceSignature,
           'identity_signature_over_device': identitySignatureOverDevice,
           'device_name': 'Naier mobile',
-          'platform': 'android',
+          'platform': platform,
+          if (inviteCode.isNotEmpty) 'invite_code': inviteCode,
         },
       );
 

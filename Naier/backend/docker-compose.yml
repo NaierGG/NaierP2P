@@ -31,12 +31,15 @@ services:
       MESH_SERVER_HOST: 0.0.0.0
       MESH_SERVER_PORT: 8080
       MESH_SERVER_MODE: debug
+      MESH_SERVER_ALLOWED_ORIGINS: http://localhost:4173,http://127.0.0.1:4173,http://localhost:5173,http://127.0.0.1:5173
       MESH_DATABASE_POSTGRES_DSN: postgres://mesh:mesh@postgres:5432/naier?sslmode=disable
       MESH_DATABASE_REDIS_ADDR: redis:6379
       MESH_DATABASE_REDIS_PASSWORD: ""
       MESH_AUTH_JWT_SECRET: development-secret
       MESH_AUTH_JWT_EXPIRY: 15m
       MESH_AUTH_REFRESH_EXPIRY: 720h
+      MESH_BETA_INVITE_ONLY: ${MESH_BETA_INVITE_ONLY:-false}
+      MESH_ADMIN_API_TOKEN: ${MESH_ADMIN_API_TOKEN:-development-admin-token}
       MESH_FEDERATION_SERVER_DOMAIN: local.naier
       MESH_FEDERATION_SERVER_PUBLIC_KEY: HfTarX+isRAQ70iy8xxuy7bxpdA2IlUYf6GbDpBgrzk=
       MESH_FEDERATION_SERVER_PRIVATE_KEY: gbZlcA4R7umBffYCUjL0C5ECODsSUTZ2BM8d7jsZU6kd9Nqtf6KxEBDvSLLzHG7LtvGl0DYiVRh/oZsOkGCvOQ==
@@ -80,12 +83,15 @@ services:
       MESH_SERVER_HOST: 0.0.0.0
       MESH_SERVER_PORT: 8080
       MESH_SERVER_MODE: debug
+      MESH_SERVER_ALLOWED_ORIGINS: http://localhost:4173,http://127.0.0.1:4173,http://localhost:5173,http://127.0.0.1:5173
       MESH_DATABASE_POSTGRES_DSN: postgres://mesh:mesh@postgres-remote:5432/naier_remote?sslmode=disable
       MESH_DATABASE_REDIS_ADDR: redis-remote:6379
       MESH_DATABASE_REDIS_PASSWORD: ""
       MESH_AUTH_JWT_SECRET: development-secret-remote
       MESH_AUTH_JWT_EXPIRY: 15m
       MESH_AUTH_REFRESH_EXPIRY: 720h
+      MESH_BETA_INVITE_ONLY: ${MESH_BETA_INVITE_ONLY:-false}
+      MESH_ADMIN_API_TOKEN: ${MESH_ADMIN_API_TOKEN:-development-admin-token}
       MESH_FEDERATION_SERVER_DOMAIN: remote3.test
       MESH_FEDERATION_SERVER_PUBLIC_KEY: HfTarX+isRAQ70iy8xxuy7bxpdA2IlUYf6GbDpBgrzk=
       MESH_FEDERATION_SERVER_PRIVATE_KEY: gbZlcA4R7umBffYCUjL0C5ECODsSUTZ2BM8d7jsZU6kd9Nqtf6KxEBDvSLLzHG7LtvGl0DYiVRh/oZsOkGCvOQ==

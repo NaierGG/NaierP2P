@@ -32,15 +32,20 @@ export default function SettingsPage() {
             </Link>
           </Button>
           <div>
-            <h1 className="text-lg font-semibold">설정</h1>
+            <h1 className="text-lg font-semibold">Settings</h1>
             <p className="text-xs text-muted-foreground">
-              {user ? `${user.display_name || user.username}` : "앱 설정"}
+              {user ? `${user.display_name || user.username}` : "Account settings"}
             </p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={logout} className="gap-2 text-destructive hover:text-destructive">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={logout}
+          className="gap-2 text-destructive hover:text-destructive"
+        >
           <LogOut className="h-3.5 w-3.5" />
-          로그아웃
+          Log out
         </Button>
       </header>
 
@@ -48,9 +53,11 @@ export default function SettingsPage() {
         <div className="mx-auto w-full max-w-3xl px-6 py-6">
           <Tabs defaultValue="profile">
             <TabsList className="w-full justify-start">
-              <TabsTrigger value="profile">프로필</TabsTrigger>
-              <TabsTrigger value="notifications">알림</TabsTrigger>
-              <TabsTrigger value="security">보안</TabsTrigger>
+              <TabsTrigger value="profile">Profile</TabsTrigger>
+              <TabsTrigger value="notifications">Notifications</TabsTrigger>
+              <TabsTrigger value="security" data-testid="settings-security-tab">
+                Security
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="profile">

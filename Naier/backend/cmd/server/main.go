@@ -58,7 +58,7 @@ func main() {
 	}()
 
 	router := gin.New()
-	router.Use(corsMiddleware())
+	router.Use(corsMiddleware(cfg.Server.AllowedOrigins))
 	router.Use(httplogger.RequestIDMiddleware())
 	router.Use(httplogger.GinLogger(log))
 	router.Use(httplogger.Recovery(log))
@@ -71,7 +71,7 @@ func main() {
 		cfg.Auth.JWTExpiry,
 		cfg.Auth.RefreshExpiry,
 	)
-	authService := auth.NewService(dbPool, redisClient, validate, jwtManager, cfg.Auth.RefreshExpiry)
+	authService := auth.NewService(dbPool, redisClient, validate, jwtManager, cfg.Auth.RefreshExpiry, cfg.Beta.InviteOnly)
 	authHandler := auth.NewHandler(authService)
 	channelRepo := channel.NewRepository(dbPool)
 	channelService := channel.NewService(channelRepo, validate)
@@ -135,6 +135,9 @@ func main() {
 
 	api := router.Group("/api/v1")
 	authHandler.RegisterRoutes(api.Group("/auth"), auth.AuthMiddleware(jwtManager))
+	adminAPI := api.Group("/admin")
+	adminAPI.Use(auth.AdminTokenMiddleware(cfg.Admin.APIToken))
+	authHandler.RegisterAdminRoutes(adminAPI)
 	api.GET("/ws", wsRouter.ServeWS)
 	protected := api.Group("")
 	protected.Use(auth.AuthMiddleware(jwtManager))
@@ -224,9 +227,26 @@ func (r *rateLimiter) allow(ip string) bool {
 	return true
 }
 
-func corsMiddleware() gin.HandlerFunc {
+func corsMiddleware(allowedOrigins []string) gin.HandlerFunc {
+	allowed := make(map[string]struct{}, len(allowedOrigins))
+	for _, origin := range allowedOrigins {
+		allowed[origin] = struct{}{}
+	}
+
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := c.GetHeader("Origin")
+		if origin != "" {
+			if _, ok := allowed[origin]; !ok {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+					"error":   "origin_not_allowed",
+					"message": "request origin is not allowed",
+				})
+				return
+			}
+
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+			c.Writer.Header().Set("Vary", "Origin")
+		}
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "false")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")

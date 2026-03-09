@@ -8,7 +8,7 @@ import {
   prependMessages,
 } from "@/app/store/messageSlice";
 import { api } from "@/shared/lib/api";
-import { isLikelyNetworkError, mockListMessages } from "@/shared/lib/mockApi";
+import { mockListMessages, shouldUseMockFallback } from "@/shared/lib/mockApi";
 import type { Message } from "@/shared/types";
 import MessageBubble from "@/features/messages/MessageBubble";
 import TypingIndicator from "@/features/presence/TypingIndicator";
@@ -70,7 +70,7 @@ export default function MessageList({ channelId }: MessageListProps) {
           );
           response = remote.data;
         } catch (error) {
-          if (!isLikelyNetworkError(error)) {
+          if (!shouldUseMockFallback(error)) {
             throw error;
           }
 
@@ -134,7 +134,7 @@ export default function MessageList({ channelId }: MessageListProps) {
           );
           response = remote.data;
         } catch (error) {
-          if (!isLikelyNetworkError(error)) {
+          if (!shouldUseMockFallback(error)) {
             throw error;
           }
 

@@ -32,6 +32,12 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup, authMiddleware gin.Han
 	router.POST("/backup/import", authMiddleware, h.importBackup)
 }
 
+func (h *Handler) RegisterAdminRoutes(router *gin.RouterGroup) {
+	router.GET("/invites", h.listInvites)
+	router.POST("/invites", h.createInvite)
+	router.DELETE("/invites/:id", h.disableInvite)
+}
+
 func (h *Handler) challenge(c *gin.Context) {
 	var req ChallengeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -300,6 +306,47 @@ func (h *Handler) importBackup(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+func (h *Handler) listInvites(c *gin.Context) {
+	invites, err := h.service.ListInvites(c.Request.Context())
+	if err != nil {
+		h.respondError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"invites": invites})
+}
+
+func (h *Handler) createInvite(c *gin.Context) {
+	var req CreateInviteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "message": err.Error()})
+		return
+	}
+
+	invite, err := h.service.CreateInvite(c.Request.Context(), c.GetHeader("X-Admin-Actor"), req)
+	if err != nil {
+		h.respondError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"invite": invite})
+}
+
+func (h *Handler) disableInvite(c *gin.Context) {
+	inviteID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_invite_id", "message": "invalid invite id"})
+		return
+	}
+
+	if err := h.service.DisableInvite(c.Request.Context(), inviteID); err != nil {
+		h.respondError(c, err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
 func (h *Handler) respondError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, ErrInvalidCredentials):
@@ -312,6 +359,16 @@ func (h *Handler) respondError(c *gin.Context, err error) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_device_request", "message": err.Error()})
 	case errors.Is(err, ErrBackupNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": "backup_not_found", "message": err.Error()})
+	case errors.Is(err, ErrInviteRequired):
+		c.JSON(http.StatusForbidden, gin.H{"error": "invite_required", "message": err.Error()})
+	case errors.Is(err, ErrInviteInvalid):
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invite_invalid", "message": err.Error()})
+	case errors.Is(err, ErrInviteExpired):
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invite_expired", "message": err.Error()})
+	case errors.Is(err, ErrInviteDisabled):
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invite_disabled", "message": err.Error()})
+	case errors.Is(err, ErrInviteExhausted):
+		c.JSON(http.StatusConflict, gin.H{"error": "invite_exhausted", "message": err.Error()})
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "auth_error", "message": err.Error()})
 	}

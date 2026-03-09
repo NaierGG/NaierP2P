@@ -1,0 +1,27 @@
+# Local SDKs and archives
+/flutter-sdk/
+/flutter-sdk2/
+/flutter-sdk3/
+/flutter-tar/
+/jdk21/
+/jdk21.zip
+
+# Accidental root npm artifact
+/package-lock.json
+
+# Web build and local runtime artifacts
+/Naier/web/node_modules/
+/Naier/web/dist/
+/Naier/web/preview.log
+/Naier/web/preview.err.log
+/Naier/web/tsconfig.app.tsbuildinfo
+/Naier/web/test-results/
+
+# Mobile local build artifacts
+/Naier/mobile/.dart_tool/
+/Naier/mobile/build/
+/Naier/mobile/.flutter-plugins-dependencies
+/Naier/mobile/.idea/
+
+# Backend temporary federation fixtures
+/Naier/backend/tmp_*

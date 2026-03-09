@@ -1,4 +1,5 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
+import { API_BASE_URL } from "@/shared/lib/runtime";
 
 interface Tokens {
   accessToken: string | null;
@@ -17,9 +18,6 @@ declare module "axios" {
     _retry?: boolean;
   }
 }
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080/api/v1";
 
 let getTokens: TokenProvider = () => ({
   accessToken: null,

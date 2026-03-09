@@ -5,6 +5,7 @@ import "time"
 type RegisterRequest struct {
 	Username                    string `json:"username" validate:"required,min=3,max=50,alphanum"`
 	DisplayName                 string `json:"display_name" validate:"required,min=1,max=100"`
+	InviteCode                  string `json:"invite_code,omitempty" validate:"omitempty,min=6,max=32"`
 	PublicKey                   string `json:"public_key,omitempty"`
 	Signature                   string `json:"signature,omitempty"`
 	IdentitySigningKey          string `json:"identity_signing_key,omitempty"`
@@ -112,4 +113,24 @@ type BackupImportResponse struct {
 	BackupBlob    string    `json:"backup_blob"`
 	BackupVersion int       `json:"backup_version"`
 	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+type CreateInviteRequest struct {
+	Code      string     `json:"code,omitempty" validate:"omitempty,min=6,max=32"`
+	Note      string     `json:"note,omitempty" validate:"omitempty,max=200"`
+	MaxUses   *int       `json:"max_uses,omitempty" validate:"omitempty,min=1,max=1000"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+}
+
+type InviteDTO struct {
+	ID        string     `json:"id"`
+	Code      string     `json:"code"`
+	Note      string     `json:"note,omitempty"`
+	CreatedBy string     `json:"created_by"`
+	MaxUses   int        `json:"max_uses"`
+	UseCount  int        `json:"use_count"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	DisabledAt *time.Time `json:"disabled_at,omitempty"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
 }

@@ -1,4 +1,5 @@
 import type { WSEvent } from "@/shared/types";
+import { API_BASE_URL, WS_URL } from "@/shared/lib/runtime";
 
 type ConnectionState =
   | "connecting"
@@ -185,14 +186,13 @@ export class WSClient {
   }
 
   private buildWebSocketURL(token: string) {
-    const configuredURL = import.meta.env.VITE_WS_URL as string | undefined;
+    const configuredURL = WS_URL;
     if (configuredURL) {
       const separator = configuredURL.includes("?") ? "&" : "?";
       return `${configuredURL}${separator}token=${encodeURIComponent(token)}`;
     }
 
-    const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080/api/v1";
-    const wsBase = apiBase.replace(/^http/, "ws").replace(/\/api\/v1\/?$/, "");
+    const wsBase = API_BASE_URL.replace(/^http/, "ws").replace(/\/api\/v1\/?$/, "");
     return `${wsBase}/api/v1/ws?token=${encodeURIComponent(token)}`;
   }
 

@@ -17,7 +17,7 @@ import {
 } from "@/app/store/messageSlice";
 import { notifyIncomingMessage } from "@/shared/lib/browserNotifications";
 import { api } from "@/shared/lib/api";
-import { mockHandleClientEvent } from "@/shared/lib/mockApi";
+import { mockHandleClientEvent, isMockFallbackEnabled } from "@/shared/lib/mockApi";
 import { setPresence, setTyping } from "@/app/store/presenceSlice";
 import { WSClient, type ConnectionState } from "@/shared/lib/websocket";
 import type {
@@ -165,6 +165,11 @@ export function useWebSocket() {
     const state = clientInstance?.getState() ?? "disconnected";
 
     if (state === "connected") {
+      clientInstance?.send(event);
+      return;
+    }
+
+    if (!isMockFallbackEnabled()) {
       clientInstance?.send(event);
       return;
     }

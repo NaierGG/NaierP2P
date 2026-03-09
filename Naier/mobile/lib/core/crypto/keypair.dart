@@ -106,10 +106,7 @@ class KeyPairService {
 
   Future<String> signChallenge(String challenge, String signingPrivateKey) async {
     final algorithm = Ed25519();
-    final keyPair = SimpleKeyPairData(
-      _decode(signingPrivateKey),
-      type: KeyPairType.ed25519,
-    );
+    final keyPair = await algorithm.newKeyPairFromSeed(_decode(signingPrivateKey));
 
     final signature = await algorithm.sign(
       utf8.encode(challenge),
@@ -124,10 +121,7 @@ class KeyPairService {
     required String theirExchangePublicKey,
   }) async {
     final algorithm = X25519();
-    final localKeyPair = SimpleKeyPairData(
-      _decode(myExchangePrivateKey),
-      type: KeyPairType.x25519,
-    );
+    final localKeyPair = await algorithm.newKeyPairFromSeed(_decode(myExchangePrivateKey));
     final remoteKey = SimplePublicKey(
       _decode(theirExchangePublicKey),
       type: KeyPairType.x25519,

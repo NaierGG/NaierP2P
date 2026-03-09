@@ -22,9 +22,9 @@ import { useWebSocket } from "@/shared/hooks/useWebSocket";
 import { api } from "@/shared/lib/api";
 import { consumePendingNotificationChannel } from "@/shared/lib/browserNotifications";
 import {
-  isLikelyNetworkError,
   mockListChannelMembers,
   mockListChannels,
+  shouldUseMockFallback,
 } from "@/shared/lib/mockApi";
 import type { Channel, ChannelMember } from "@/shared/types";
 
@@ -51,6 +51,7 @@ export default function ChannelList() {
   );
 
   const [channelMembers, setChannelMembers] = useState<Record<string, ChannelMember[]>>({});
+  const [loadError, setLoadError] = useState<string | null>(null);
   const joinedChannelsRef = useRef<Set<string>>(new Set());
   const pendingNotificationChannelRef = useRef<string | null>(consumePendingNotificationChannel());
 
@@ -87,14 +88,21 @@ export default function ChannelList() {
         const response = await api.get<ChannelListResponse>("/channels");
         if (cancelled) return;
 
+        setLoadError(null);
         dispatch(setChannels(response.data.channels));
         selectInitialChannel(response.data.channels);
       } catch (error) {
-        if (!isLikelyNetworkError(error)) throw error;
+        if (!shouldUseMockFallback(error)) {
+          if (!cancelled) {
+            setLoadError(error instanceof Error ? error.message : "Failed to load channels.");
+          }
+          return;
+        }
 
         const response = await mockListChannels();
         if (cancelled) return;
 
+        setLoadError(null);
         dispatch(setChannels(response.channels));
         selectInitialChannel(response.channels);
       }
@@ -138,7 +146,9 @@ export default function ChannelList() {
             const response = await api.get<ChannelMembersResponse>(`/channels/${channel.id}/members`);
             return { channelId: channel.id, members: response.data.members };
           } catch (error) {
-            if (!isLikelyNetworkError(error)) throw error;
+            if (!shouldUseMockFallback(error)) {
+              return { channelId: channel.id, members: [] };
+            }
             const mockResponse = await mockListChannelMembers(channel.id);
             return { channelId: channel.id, members: mockResponse.members };
           }
@@ -210,6 +220,13 @@ export default function ChannelList() {
               <span>Search channels</span>
             </div>
           </div>
+          {loadError && (
+            <div className="px-3 pb-2">
+              <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {loadError}
+              </p>
+            </div>
+          )}
 
           <ScrollArea className="flex-1">
             <div className="flex flex-col gap-0.5 px-2 py-1">
@@ -253,6 +270,7 @@ export default function ChannelList() {
             </div>
             <div className="flex gap-1">
               <Button
+                data-testid="open-settings"
                 variant="ghost"
                 size="icon"
                 onClick={() => navigate("/app/settings")}

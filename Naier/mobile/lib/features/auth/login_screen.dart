@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/crypto/keypair.dart';
 import '../../core/network/api_client.dart';
+import '../../core/network/runtime_config.dart';
 import '../../shared/models/session.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -101,6 +102,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final dio = ref.read(dioProvider);
     final auth = ref.read(authSessionProvider.notifier);
     final signer = const KeyPairService();
+    final platform = currentClientPlatform();
 
     try {
       final challengeResponse = await dio.post<Map<String, dynamic>>(
@@ -109,7 +111,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           'username': username,
           'device_signing_key': bundle.device.signingPublicKey,
           'device_name': 'Naier mobile',
-          'platform': 'android',
+          'platform': platform,
         },
       );
       final challenge = challengeResponse.data?['challenge']?.toString() ?? '';
@@ -130,7 +132,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           'device_signature': deviceSignature,
           'device_signing_key': bundle.device.signingPublicKey,
           'device_name': 'Naier mobile',
-          'platform': 'android',
+          'platform': platform,
         },
       );
 

@@ -111,6 +111,7 @@ export default function Composer({ channelId, send }: ComposerProps) {
     <div className="border-t border-border px-4 py-3">
       <div className="flex items-end gap-2">
         <textarea
+          data-testid="chat-composer-input"
           ref={textareaRef}
           className="flex-1 resize-none rounded-xl border border-input bg-card px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
           disabled={disabled}
@@ -132,6 +133,7 @@ export default function Composer({ channelId, send }: ComposerProps) {
           value={value}
         />
         <Button
+          data-testid="chat-composer-send"
           size="icon"
           disabled={disabled || value.trim().length === 0}
           onClick={() => void handleSend()}
