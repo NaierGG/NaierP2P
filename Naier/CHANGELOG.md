@@ -57,6 +57,8 @@
 - Fly deployment config now keeps one machine warm to avoid beta cold starts
 - GitHub Actions can now optionally deploy the static web app to Vercel when the web deployment secrets are configured
 - mobile registration now accepts invite codes and uses runtime platform metadata so invite-only beta servers stay API-compatible with the Flutter client
+- deployment docs now include an explicit Vercel setup guide with `Naier/web` root-directory requirements
+- GitHub Actions deploy paths now resolve from the real repository root instead of assuming `backend`, `web`, and `mobile` live at the top level
 
 ### Planned compatibility work in progress
 

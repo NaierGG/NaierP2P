@@ -9,9 +9,16 @@ interface AppShellProps {
 
 export default function AppShell({ sidebar, children, className }: AppShellProps) {
   return (
-    <div className={cn("flex h-screen w-full overflow-hidden bg-background", className)}>
-      {sidebar}
-      {children}
+    <div
+      className={cn(
+        "app-noise relative flex h-screen w-full overflow-hidden bg-transparent p-3 md:p-4 lg:p-5",
+        className
+      )}
+    >
+      <div className="relative z-10 flex w-full min-w-0 gap-3">
+        {sidebar}
+        {children}
+      </div>
     </div>
   );
 }

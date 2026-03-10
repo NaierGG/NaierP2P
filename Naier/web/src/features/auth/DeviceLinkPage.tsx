@@ -5,6 +5,10 @@ import { ArrowRight, Copy, KeyRound, ShieldCheck } from "lucide-react";
 import { setAuth, setKeyPair } from "@/app/store/authSlice";
 import { useAppDispatch } from "@/app/store/hooks";
 import { loginWithChallenge, requestChallenge } from "@/features/auth/authApi";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   decryptKeyBundleBackup,
   generateKeyPair,
@@ -13,11 +17,6 @@ import {
   type KeyBundle,
 } from "@/shared/lib/crypto";
 import { keyStore } from "@/shared/lib/keystore";
-
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 
 interface PendingDeviceKeys {
   signing: {
@@ -103,7 +102,9 @@ export default function DeviceLinkPage() {
         exchange: nextExchange,
       });
       setPreparedBundle(nextBundle);
-      setNotice("New device keys are ready. Approve this payload from a trusted device, then return here and complete sign-in.");
+      setNotice(
+        "New device keys are ready. Approve this payload from a trusted device, then return here and complete sign-in."
+      );
     } catch (nextError) {
       setError(
         nextError instanceof Error
@@ -147,11 +148,13 @@ export default function DeviceLinkPage() {
         platform: "web",
       });
 
-      dispatch(setAuth({
-        user: authResponse.user,
-        accessToken: authResponse.access_token,
-        refreshToken: authResponse.refresh_token,
-      }));
+      dispatch(
+        setAuth({
+          user: authResponse.user,
+          accessToken: authResponse.access_token,
+          refreshToken: authResponse.refresh_token,
+        })
+      );
       dispatch(setKeyPair(preparedBundle));
       setNotice("This device is approved and signed in.");
       navigate("/app");
@@ -169,13 +172,16 @@ export default function DeviceLinkPage() {
   return (
     <Card className="w-full max-w-2xl">
       <CardHeader className="items-center text-center">
-        <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-primary/75">
+          Trusted device handoff
+        </p>
+        <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-2xl border border-primary/15 bg-primary/10">
           <ShieldCheck className="h-6 w-6 text-primary" />
         </div>
         <CardTitle className="text-xl">Add a new device</CardTitle>
         <CardDescription>
-          Restore your encrypted backup, generate fresh device keys, approve them from a trusted device,
-          then complete sign-in on this browser.
+          Restore your encrypted backup, generate fresh device keys, approve them from a trusted
+          device, then complete sign-in on this browser.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -214,7 +220,11 @@ export default function DeviceLinkPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button data-testid="device-link-prepare" disabled={loading} onClick={() => void prepareDevice()}>
+          <Button
+            data-testid="device-link-prepare"
+            disabled={loading}
+            onClick={() => void prepareDevice()}
+          >
             <KeyRound className="mr-2 h-4 w-4" />
             Prepare this device
           </Button>
@@ -255,11 +265,11 @@ export default function DeviceLinkPage() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-border/60 bg-muted/40 p-4 text-sm text-muted-foreground">
+        <div className="rounded-2xl border border-border/60 bg-secondary/40 p-4 text-sm text-muted-foreground">
           <p className="font-medium text-foreground">Next step</p>
           <p className="mt-1">
-            Open <span className="font-mono">Settings → Security</span> on a trusted signed-in device,
-            paste this pairing payload, approve it, then come back here and press
+            Open <span className="font-mono">Settings &gt; Security</span> on a trusted signed-in
+            device, paste this pairing payload, approve it, then come back here and press
             <span className="font-medium"> Complete sign-in</span>.
           </p>
         </div>

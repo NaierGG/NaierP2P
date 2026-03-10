@@ -1,18 +1,19 @@
 import type { Dispatch, SetStateAction } from "react";
 
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import type { AppSettings } from "@/features/settings/settingsStorage";
 import {
   ensureDesktopNotificationPermission,
   previewNotificationSound,
 } from "@/shared/lib/browserNotifications";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
-
 interface NotificationSettingsProps {
   settings: AppSettings;
-  setSettings: Dispatch<SetStateAction<AppSettings>> | ((next: AppSettings | ((current: AppSettings) => AppSettings)) => void);
+  setSettings:
+    | Dispatch<SetStateAction<AppSettings>>
+    | ((next: AppSettings | ((current: AppSettings) => AppSettings)) => void);
 }
 
 export default function NotificationSettings({
@@ -38,79 +39,81 @@ export default function NotificationSettings({
     <div className="flex flex-col gap-4">
       <Card>
         <CardHeader>
-          <CardTitle>알림</CardTitle>
-          <CardDescription>알림 및 채팅 동작을 설정합니다.</CardDescription>
+          <CardTitle>Notifications</CardTitle>
+          <CardDescription>
+            Tune alerts to keep attention on meaningful activity instead of constant interruption.
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-1">
           <SettingRow
-            label="데스크톱 알림"
-            description="새로운 활동에 대해 브라우저 알림을 표시합니다."
+            label="Desktop notifications"
+            description="Show a browser notification when a message arrives outside the current thread."
             checked={settings.desktopNotifications}
-            onChange={(v) => void updateSetting("desktopNotifications", v)}
+            onChange={(value) => void updateSetting("desktopNotifications", value)}
           />
           <Separator />
           <SettingRow
-            label="소리 알림"
-            description="새 메시지가 도착하면 소리를 재생합니다."
+            label="Sound alerts"
+            description="Play a short sound preview when a new message appears."
             checked={settings.soundNotifications}
-            onChange={(v) => void updateSetting("soundNotifications", v)}
+            onChange={(value) => void updateSetting("soundNotifications", value)}
           />
           <Separator />
           <SettingRow
-            label="메시지 미리보기"
-            description="채널 카드에 최신 메시지를 미리 표시합니다."
+            label="Message preview"
+            description="Show the latest message snippet in the channel list."
             checked={settings.messagePreview}
-            onChange={(v) => void updateSetting("messagePreview", v)}
+            onChange={(value) => void updateSetting("messagePreview", value)}
           />
           <Separator />
           <SettingRow
-            label="입력 중 표시"
-            description="다른 멤버가 입력 중인 것을 표시합니다."
+            label="Typing indicators"
+            description="Display when other members are composing a message."
             checked={settings.typingIndicators}
-            onChange={(v) => void updateSetting("typingIndicators", v)}
+            onChange={(value) => void updateSetting("typingIndicators", value)}
           />
           <Separator />
           <SettingRow
-            label="Enter로 전송"
-            description="비활성화하면 여러 줄 입력이 기본됩니다."
+            label="Enter sends message"
+            description="Turn this off if you prefer Enter to create a new line."
             checked={settings.enterToSend}
-            onChange={(v) => void updateSetting("enterToSend", v)}
+            onChange={(value) => void updateSetting("enterToSend", value)}
           />
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>화면 설정</CardTitle>
+          <CardTitle>Interface</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium">테마</span>
+            <span className="text-sm font-medium">Appearance</span>
             <select
-              className="flex h-10 w-full rounded-xl border border-input bg-card px-4 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onChange={(e) =>
-                void updateSetting("appearance", e.target.value as AppSettings["appearance"])
+              className="flex h-11 w-full rounded-2xl border border-input/80 bg-card/70 px-4 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onChange={(event) =>
+                void updateSetting("appearance", event.target.value as AppSettings["appearance"])
               }
               value={settings.appearance}
             >
-              <option value="system">시스템 설정</option>
-              <option value="dark">다크</option>
-              <option value="light">라이트</option>
+              <option value="system">System</option>
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
             </select>
           </label>
 
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium">상태</span>
+            <span className="text-sm font-medium">Presence status</span>
             <select
-              className="flex h-10 w-full rounded-xl border border-input bg-card px-4 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onChange={(e) =>
-                void updateSetting("status", e.target.value as AppSettings["status"])
+              className="flex h-11 w-full rounded-2xl border border-input/80 bg-card/70 px-4 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onChange={(event) =>
+                void updateSetting("status", event.target.value as AppSettings["status"])
               }
               value={settings.status}
             >
-              <option value="online">온라인</option>
-              <option value="away">자리 비움</option>
-              <option value="dnd">방해 금지</option>
+              <option value="online">Online</option>
+              <option value="away">Away</option>
+              <option value="dnd">Do not disturb</option>
             </select>
           </label>
         </CardContent>

@@ -45,11 +45,26 @@ npm.cmd run build
 
 Deploy the generated `web/dist` folder to a static host. `web/vercel.json` already includes a SPA rewrite for Vercel-style hosting.
 
+Vercel project settings:
+
+- Framework Preset: `Vite`
+- Root Directory: `Naier/web`
+- Install Command: `npm ci`
+- Build Command: `npm run build`
+- Output Directory: `dist`
+
+The repository root is above `Naier/web`, so `Root Directory` must be set explicitly. Leaving it at the repository root will make Vercel build the wrong folder.
+
 Required web runtime variables:
 
 - `VITE_API_BASE_URL=https://api.<domain>/api/v1`
 - `VITE_WS_URL=wss://api.<domain>/api/v1/ws`
 - `VITE_ENABLE_MOCK_FALLBACK=false`
+
+Recommended host split:
+
+- `app.<domain>` -> Vercel
+- `api.<domain>` -> Fly.io or API reverse proxy
 
 Optional GitHub Actions secrets for automatic Vercel deployment:
 
@@ -64,6 +79,13 @@ If all five secrets are present, `.github/workflows/deploy.yml` will:
 1. pull Vercel production project metadata
 2. build the prebuilt web artifact with production API envs
 3. deploy the static app after the Fly.io backend deployment succeeds
+
+Recommended rollout order:
+
+1. complete one manual Vercel production deploy
+2. connect `app.<domain>`
+3. verify auth, API, and WebSocket against `api.<domain>`
+4. then add the five `WEB_*` GitHub secrets and enable automated deploys
 
 ## Backend Deployment
 

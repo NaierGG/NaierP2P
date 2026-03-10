@@ -4,85 +4,147 @@
 
 @layer base {
   :root {
-    --background: 220 20% 7%;
-    --foreground: 36 30% 93%;
-    --card: 220 18% 9%;
-    --card-foreground: 36 30% 93%;
-    --popover: 220 18% 9%;
-    --popover-foreground: 36 30% 93%;
-    --primary: 28 90% 58%;
-    --primary-foreground: 28 30% 10%;
-    --secondary: 220 14% 16%;
-    --secondary-foreground: 220 14% 86%;
-    --muted: 220 14% 16%;
-    --muted-foreground: 220 14% 70%;
-    --accent: 220 14% 18%;
-    --accent-foreground: 36 30% 93%;
+    --background: 212 40% 8%;
+    --foreground: 205 28% 95%;
+    --card: 214 28% 12%;
+    --card-foreground: 205 28% 95%;
+    --popover: 214 28% 11%;
+    --popover-foreground: 205 28% 95%;
+    --primary: 191 72% 56%;
+    --primary-foreground: 210 40% 10%;
+    --secondary: 214 22% 18%;
+    --secondary-foreground: 205 20% 88%;
+    --muted: 214 20% 17%;
+    --muted-foreground: 212 16% 68%;
+    --accent: 214 24% 16%;
+    --accent-foreground: 205 28% 95%;
     --destructive: 0 72% 65%;
     --destructive-foreground: 0 0% 100%;
-    --border: 220 14% 18%;
-    --input: 220 14% 18%;
-    --ring: 28 90% 58%;
-    --radius: 0.75rem;
-    --sidebar: 220 20% 5%;
-    --sidebar-foreground: 36 30% 93%;
-    --sidebar-border: 220 14% 14%;
-    --bubble: 220 14% 13%;
-    --bubble-own: 28 40% 18%;
+    --border: 214 19% 24%;
+    --input: 214 20% 24%;
+    --ring: 191 72% 56%;
+    --radius: 1rem;
+    --sidebar: 213 46% 7%;
+    --sidebar-foreground: 205 28% 95%;
+    --sidebar-border: 214 22% 18%;
+    --bubble: 214 23% 15%;
+    --bubble-own: 190 42% 18%;
   }
 
   [data-theme="light"] {
-    --background: 216 28% 95%;
-    --foreground: 220 25% 16%;
+    --background: 204 38% 96%;
+    --foreground: 214 28% 16%;
     --card: 0 0% 100%;
-    --card-foreground: 220 25% 16%;
+    --card-foreground: 214 28% 16%;
     --popover: 0 0% 100%;
-    --popover-foreground: 220 25% 16%;
-    --primary: 28 90% 52%;
+    --popover-foreground: 214 28% 16%;
+    --primary: 192 68% 42%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 216 20% 92%;
-    --secondary-foreground: 220 25% 24%;
-    --muted: 216 20% 92%;
-    --muted-foreground: 220 14% 40%;
-    --accent: 216 20% 94%;
-    --accent-foreground: 220 25% 16%;
+    --secondary: 200 28% 92%;
+    --secondary-foreground: 214 25% 24%;
+    --muted: 204 24% 92%;
+    --muted-foreground: 212 14% 40%;
+    --accent: 202 24% 94%;
+    --accent-foreground: 214 28% 16%;
     --destructive: 0 72% 55%;
     --destructive-foreground: 0 0% 100%;
-    --border: 216 20% 88%;
-    --input: 216 20% 88%;
-    --ring: 28 90% 52%;
-    --radius: 0.75rem;
-    --sidebar: 216 28% 97%;
-    --sidebar-foreground: 220 25% 16%;
-    --sidebar-border: 216 20% 90%;
-    --bubble: 216 20% 94%;
-    --bubble-own: 28 60% 94%;
+    --border: 202 20% 85%;
+    --input: 202 20% 85%;
+    --ring: 192 68% 42%;
+    --radius: 1rem;
+    --sidebar: 204 46% 98%;
+    --sidebar-foreground: 214 28% 16%;
+    --sidebar-border: 202 22% 88%;
+    --bubble: 204 28% 95%;
+    --bubble-own: 190 58% 93%;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  [data-theme="light"] {
+    color-scheme: light;
   }
 
   * {
     @apply border-border;
   }
 
+  ::selection {
+    background-color: hsl(var(--primary) / 0.28);
+    color: hsl(var(--foreground));
+  }
+
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply bg-background text-foreground antialiased;
+    background-image:
+      radial-gradient(circle at top left, hsl(190 68% 18% / 0.34), transparent 30%),
+      radial-gradient(circle at top right, hsl(36 92% 58% / 0.14), transparent 22%),
+      linear-gradient(180deg, hsl(var(--background)) 0%, hsl(214 42% 6%) 100%);
+    font-family: "Aptos", "Segoe UI", sans-serif;
     margin: 0;
     min-width: 320px;
     min-height: 100vh;
   }
 
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: "Aptos Display", "Aptos", "Segoe UI", sans-serif;
+    letter-spacing: -0.025em;
+  }
+
   #root {
     min-height: 100vh;
+    position: relative;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
   }
 }
 
-/* typing dots animation */
 @layer utilities {
+  .app-noise {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .app-noise::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.06;
+    background-image:
+      linear-gradient(transparent 0, transparent calc(100% - 1px), hsl(var(--border) / 0.32) 100%),
+      linear-gradient(90deg, transparent 0, transparent calc(100% - 1px), hsl(var(--border) / 0.24) 100%);
+    background-size: 100% 28px, 28px 100%;
+    mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), transparent 92%);
+  }
+
   .typing-dot {
     @apply w-1.5 h-1.5 rounded-full bg-current animate-typing-bounce;
   }
+
   .typing-dot:nth-child(2) {
     animation-delay: 0.15s;
   }
+
   .typing-dot:nth-child(3) {
     animation-delay: 0.3s;
   }

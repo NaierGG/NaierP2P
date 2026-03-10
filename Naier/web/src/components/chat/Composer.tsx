@@ -3,9 +3,9 @@ import { Send } from "lucide-react";
 
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import { addPendingMessage, failPendingMessage } from "@/app/store/messageSlice";
+import { Button } from "@/components/ui/button";
 import { useSettings } from "@/features/settings/useSettings";
 import { useEncryption } from "@/shared/hooks/useEncryption";
-import { Button } from "@/components/ui/button";
 import type { WSEvent } from "@/shared/types";
 
 interface ComposerProps {
@@ -30,12 +30,12 @@ export default function Composer({ channelId, send }: ComposerProps) {
     };
   }, []);
 
-  // 텍스트영역 높이 자동 조절 — 사용자가 입력 크기를 볼 수 있어 인지 부하 감소
+  // Keep the input compact while still allowing short multi-line drafts.
   useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = "0";
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+    const element = textareaRef.current;
+    if (!element) return;
+    element.style.height = "0";
+    element.style.height = `${Math.min(element.scrollHeight, 160)}px`;
   }, [value]);
 
   async function handleSend() {
@@ -83,7 +83,7 @@ export default function Composer({ channelId, send }: ComposerProps) {
       dispatch(
         failPendingMessage({
           clientId,
-          error: error instanceof Error ? error.message : "전송 실패",
+          error: error instanceof Error ? error.message : "Message delivery failed.",
         })
       );
     }
@@ -108,26 +108,26 @@ export default function Composer({ channelId, send }: ComposerProps) {
   const disabled = !channelId;
 
   return (
-    <div className="border-t border-border px-4 py-3">
-      <div className="flex items-end gap-2">
+    <div className="border-t border-border/70 bg-card/45 px-4 py-4 backdrop-blur-sm md:px-6">
+      <div className="mx-auto flex w-full max-w-4xl items-end gap-3">
         <textarea
           data-testid="chat-composer-input"
           ref={textareaRef}
-          className="flex-1 resize-none rounded-xl border border-input bg-card px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex-1 resize-none rounded-[1.5rem] border border-input/80 bg-card/70 px-4 py-3.5 text-sm text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] placeholder:text-muted-foreground/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
           disabled={disabled}
-          onChange={(e) => handleChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (settings.enterToSend && e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
+          onChange={(event) => handleChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (settings.enterToSend && event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
               void handleSend();
             }
           }}
           placeholder={
             channelId
               ? settings.enterToSend
-                ? "메시지를 입력하세요 (Enter로 전송)"
-                : "메시지를 입력하세요"
-              : "채널을 선택하세요"
+                ? "Write a secure message. Press Enter to send."
+                : "Write a secure message. Shift+Enter adds a line."
+              : "Select a channel to start composing."
           }
           rows={1}
           value={value}
@@ -137,7 +137,7 @@ export default function Composer({ channelId, send }: ComposerProps) {
           size="icon"
           disabled={disabled || value.trim().length === 0}
           onClick={() => void handleSend()}
-          className="h-10 w-10 shrink-0"
+          className="h-12 w-12 shrink-0"
         >
           <Send className="h-4 w-4" />
         </Button>

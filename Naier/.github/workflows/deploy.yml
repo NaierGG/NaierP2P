@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: backend
+        working-directory: Naier/backend
     steps:
       - uses: actions/checkout@v4
 
@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: web
+        working-directory: Naier/web
     steps:
       - uses: actions/checkout@v4
 
@@ -37,7 +37,7 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: Naier/web/package-lock.json
 
       - name: Install web dependencies
         run: npm ci
@@ -55,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: mobile
+        working-directory: Naier/mobile
     steps:
       - uses: actions/checkout@v4
 
@@ -91,41 +91,41 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: Naier/web/package-lock.json
 
       - name: Start backend stack
-        working-directory: backend
+        working-directory: Naier/backend
         run: docker compose up -d postgres redis postgres-remote redis-remote
 
       - name: Run migrations
-        working-directory: backend
+        working-directory: Naier/backend
         run: |
           docker compose run --rm --entrypoint /app/migrate backend up
           docker compose run --rm --entrypoint /app/migrate backend-remote up
 
       - name: Start backend services
-        working-directory: backend
+        working-directory: Naier/backend
         run: docker compose up -d --build backend backend-remote
 
       - name: Run backend integration smoke
-        working-directory: backend
+        working-directory: Naier/backend
         run: go run ./cmd/integration-smoke
 
       - name: Install web dependencies
-        working-directory: web
+        working-directory: Naier/web
         run: npm ci
 
       - name: Install Playwright Chromium
-        working-directory: web
+        working-directory: Naier/web
         run: npx playwright install --with-deps chromium
 
       - name: Run live web smoke
-        working-directory: web
+        working-directory: Naier/web
         run: npm run test:e2e:live
 
       - name: Stop backend stack
         if: always()
-        working-directory: backend
+        working-directory: Naier/backend
         run: docker compose down -v
 
   deploy:
@@ -157,7 +157,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       - name: Build backend container
-        run: docker build -f backend/Dockerfile -t mesh-chat-backend:${{ github.sha }} backend
+        run: docker build -f Naier/backend/Dockerfile -t mesh-chat-backend:${{ github.sha }} Naier/backend
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
@@ -181,7 +181,7 @@ jobs:
             --app naier-api
 
       - name: Deploy to Fly.io
-        run: flyctl deploy --config infra/fly.toml --remote-only
+        run: flyctl deploy --config Naier/infra/fly.toml --remote-only
 
       - name: Verify migration status
         run: flyctl ssh console --app naier-api -C "/app/migrate status"
@@ -195,7 +195,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.WEB_VERCEL_TOKEN != '' && secrets.WEB_VERCEL_ORG_ID != '' && secrets.WEB_VERCEL_PROJECT_ID != '' && secrets.WEB_VITE_API_BASE_URL != '' && secrets.WEB_VITE_WS_URL != ''
     defaults:
       run:
-        working-directory: web
+        working-directory: Naier/web
     env:
       VERCEL_TOKEN: ${{ secrets.WEB_VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.WEB_VERCEL_ORG_ID }}
@@ -210,7 +210,7 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: Naier/web/package-lock.json
 
       - name: Install web dependencies
         run: npm ci

@@ -24,6 +24,7 @@ Current release target:
 - web-only closed beta
 - invite-only registration
 - static web hosting + Fly.io backend
+- Vercel for `Naier/web`, Fly.io for `api.<domain>`
 
 Still pending for full production-readiness:
 
@@ -72,6 +73,7 @@ curl.exe http://localhost:8081/health
 - [Run Local](./docs/RUN_LOCAL.md)
 - [Testing Checklist](./docs/TESTING.md)
 - [Closed Beta Runbook](./docs/BETA_RUNBOOK.md)
+- [Vercel Setup](./docs/VERCEL.md)
 - [Architecture](./docs/ARCHITECTURE.md)
 - [Backend](./docs/BACKEND.md)
 - [Web](./docs/WEB.md)
@@ -83,6 +85,7 @@ curl.exe http://localhost:8081/health
 
 - Production builds require `VITE_API_BASE_URL`.
 - Production builds must set `VITE_ENABLE_MOCK_FALLBACK=false`.
+- Vercel `Root Directory` must be `Naier/web`.
 - Release mode backend boot now fails if JWT secret, MinIO credentials, federation keys, or allowed origins are missing or left at defaults.
 - Invite management uses the admin API guarded by `X-Admin-Token`.
 

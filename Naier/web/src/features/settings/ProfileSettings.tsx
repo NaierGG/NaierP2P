@@ -2,12 +2,11 @@ import { useEffect, useState } from "react";
 
 import { setAuth } from "@/app/store/authSlice";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
-import { fetchProfile, updateProfile } from "@/features/settings/settingsApi";
-
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { fetchProfile, updateProfile } from "@/features/settings/settingsApi";
 
 export default function ProfileSettings() {
   const dispatch = useAppDispatch();
@@ -46,7 +45,9 @@ export default function ProfileSettings() {
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [accessToken, dispatch, refreshToken]);
 
   if (!user || !accessToken) return null;
@@ -76,7 +77,7 @@ export default function ProfileSettings() {
       setSaved(true);
       window.setTimeout(() => setSaved(false), 1600);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "프로필 업데이트에 실패했습니다.");
+      setError(nextError instanceof Error ? nextError.message : "Profile update failed.");
     } finally {
       setLoading(false);
     }
@@ -85,39 +86,38 @@ export default function ProfileSettings() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>프로필</CardTitle>
-        <CardDescription>다른 사용자에게 보이는 정보를 관리합니다.</CardDescription>
+        <CardTitle>Profile</CardTitle>
+        <CardDescription>
+          Control the name and bio other members see when they enter a trusted conversation.
+        </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-4 md:grid-cols-2">
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium">사용자 이름</span>
+            <span className="text-sm font-medium">Username</span>
             <Input disabled value={currentUser.username} />
           </label>
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium">표시 이름</span>
-            <Input
-              onChange={(e) => setDisplayName(e.target.value)}
-              value={displayName}
-            />
+            <span className="text-sm font-medium">Display name</span>
+            <Input onChange={(event) => setDisplayName(event.target.value)} value={displayName} />
           </label>
         </div>
 
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">소개</span>
+          <span className="text-sm font-medium">Bio</span>
           <Textarea
-            onChange={(e) => setBio(e.target.value)}
+            onChange={(event) => setBio(event.target.value)}
             rows={3}
             value={bio}
-            placeholder="자기소개를 입력하세요"
+            placeholder="Write a short introduction or trust signal for your contacts."
           />
         </label>
 
         <div className="flex items-center gap-3">
           <Button disabled={loading} onClick={() => void handleSave()}>
-            {loading ? "저장 중..." : "프로필 저장"}
+            {loading ? "Saving..." : "Save profile"}
           </Button>
-          {saved && <span className="text-sm text-emerald-500">저장되었습니다.</span>}
+          {saved && <span className="text-sm text-emerald-500">Saved.</span>}
           {error && <span className="text-sm text-destructive">{error}</span>}
         </div>
       </CardContent>

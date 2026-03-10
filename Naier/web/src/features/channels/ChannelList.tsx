@@ -5,19 +5,19 @@ import { LogOut, Search, Settings } from "lucide-react";
 import { clearAuth } from "@/app/store/authSlice";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import { setActiveChannel, setChannels } from "@/app/store/channelSlice";
-import AppShell from "@/components/layout/AppShell";
-import SidebarLayout from "@/components/layout/Sidebar";
-import ChatPanel from "@/components/layout/ChatPanel";
-import ChatHeader from "@/components/chat/ChatHeader";
 import ChannelItem from "@/components/chat/ChannelItem";
+import ChatHeader from "@/components/chat/ChatHeader";
+import Composer from "@/components/chat/Composer";
 import MemberBar from "@/components/chat/MemberBar";
 import MessageList from "@/components/chat/MessageList";
-import Composer from "@/components/chat/Composer";
+import ChatPanel from "@/components/layout/ChatPanel";
+import AppShell from "@/components/layout/AppShell";
+import SidebarLayout from "@/components/layout/Sidebar";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { useSettings } from "@/features/settings/useSettings";
 import { getChannelPresentation } from "@/features/channels/channelPresentation";
+import { useSettings } from "@/features/settings/useSettings";
 import { useWebSocket } from "@/shared/hooks/useWebSocket";
 import { api } from "@/shared/lib/api";
 import { consumePendingNotificationChannel } from "@/shared/lib/browserNotifications";
@@ -157,16 +157,14 @@ export default function ChannelList() {
 
       if (cancelled) return;
 
-      setChannelMembers((prev) => {
-        const next = { ...prev };
+      setChannelMembers((previous) => {
+        const next = { ...previous };
         let changed = false;
         for (const response of responses) {
-          if (response) {
-            next[response.channelId] = response.members;
-            changed = true;
-          }
+          next[response.channelId] = response.members;
+          changed = true;
         }
-        return changed ? next : prev;
+        return changed ? next : previous;
       });
     };
 
@@ -207,31 +205,35 @@ export default function ChannelList() {
     <AppShell
       sidebar={
         <SidebarLayout>
-          <div className="px-4 pb-2 pt-5">
-            <h2 className="text-lg font-semibold tracking-tight">Naier</h2>
-            <p className="text-xs text-muted-foreground">
+          <div className="border-b border-border/60 px-5 pb-4 pt-6">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-primary/75">
+              Trusted network
+            </p>
+            <h2 className="text-2xl font-semibold tracking-tight">Naier</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
               {currentUser?.display_name ?? currentUser?.username ?? "Guest"}
             </p>
           </div>
 
-          <div className="px-3 pb-2">
-            <div className="flex items-center gap-2 rounded-xl border border-input bg-card px-3 py-2 text-sm text-muted-foreground">
+          <div className="px-4 pb-3 pt-4">
+            <div className="flex items-center gap-2 rounded-[1.35rem] border border-input/80 bg-card/70 px-3.5 py-3 text-sm text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
               <Search className="h-3.5 w-3.5" />
-              <span>Search channels</span>
+              <span>Search secure threads</span>
             </div>
           </div>
+
           {loadError && (
-            <div className="px-3 pb-2">
-              <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            <div className="px-4 pb-3">
+              <p className="rounded-2xl border border-destructive/30 bg-destructive/10 px-3 py-3 text-xs text-destructive">
                 {loadError}
               </p>
             </div>
           )}
 
           <ScrollArea className="flex-1">
-            <div className="flex flex-col gap-0.5 px-2 py-1">
+            <div className="flex flex-col gap-2 px-3 py-2">
               {channelList.length === 0 ? (
-                <p className="px-3 py-8 text-center text-sm text-muted-foreground">
+                <p className="px-3 py-10 text-center text-sm text-muted-foreground">
                   No channels yet
                 </p>
               ) : (
@@ -259,7 +261,7 @@ export default function ChannelList() {
           </ScrollArea>
 
           <Separator />
-          <div className="flex items-center justify-between gap-2 px-3 py-3">
+          <div className="flex items-center justify-between gap-3 px-4 py-4">
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">
                 {currentUser?.display_name ?? currentUser?.username ?? "Guest"}
@@ -268,10 +270,10 @@ export default function ChannelList() {
                 {currentUser?.username ? `@${currentUser.username}` : ""}
               </p>
             </div>
-            <div className="flex gap-1">
+            <div className="flex gap-2">
               <Button
                 data-testid="open-settings"
-                variant="ghost"
+                variant="outline"
                 size="icon"
                 onClick={() => navigate("/app/settings")}
                 title="Settings"
@@ -279,7 +281,7 @@ export default function ChannelList() {
                 <Settings className="h-4 w-4" />
               </Button>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="icon"
                 onClick={() => {
                   dispatch(clearAuth());

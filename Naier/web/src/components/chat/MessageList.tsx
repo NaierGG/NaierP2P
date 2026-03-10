@@ -93,9 +93,11 @@ export default function MessageList({ channelId, members = [] }: MessageListProp
         setLoadError(null);
         const ordered = [...response.messages].reverse();
         dispatch(setMessagesForChannel({ channelId, messages: ordered }));
-        const latestEventID = [...ordered].reverse().find((message) => message.server_event_id)?.server_event_id;
-        if (latestEventID) {
-          dispatch(setLastServerEventId(latestEventID));
+        const latestEventId = [...ordered]
+          .reverse()
+          .find((message) => message.server_event_id)?.server_event_id;
+        if (latestEventId) {
+          dispatch(setLastServerEventId(latestEventId));
         }
         dispatch(
           setPagination({
@@ -181,19 +183,26 @@ export default function MessageList({ channelId, members = [] }: MessageListProp
 
   if (!channelId) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
-        <MessageSquare className="h-12 w-12 opacity-30" />
-        <p className="text-sm">Select a channel to start chatting.</p>
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center text-muted-foreground">
+        <div className="flex h-16 w-16 items-center justify-center rounded-[1.5rem] border border-border/70 bg-card/70">
+          <MessageSquare className="h-7 w-7 opacity-60" />
+        </div>
+        <div className="space-y-1">
+          <p className="text-base font-medium text-foreground">No conversation selected</p>
+          <p className="text-sm text-muted-foreground">
+            Open a channel from the sidebar to view messages and presence.
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
-      <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-4">
-        <div className="flex flex-col gap-1.5">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-5 md:px-5">
+        <div className="mx-auto flex w-full max-w-4xl flex-col gap-2">
           {loadError && (
-            <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <p className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
               {loadError}
             </p>
           )}
@@ -219,7 +228,7 @@ export default function MessageList({ channelId, members = [] }: MessageListProp
               setShowJump(false);
             }
           }}
-          className="absolute bottom-14 right-4 gap-1.5 shadow-lg"
+          className="absolute bottom-16 right-6 gap-1.5"
         >
           <ArrowDown className="h-3.5 w-3.5" />
           Latest messages

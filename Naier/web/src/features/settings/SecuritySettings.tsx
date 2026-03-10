@@ -1,8 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
-import { Copy, Download, ExternalLink, KeyRound, Shield, Smartphone, Trash2, Upload } from "lucide-react";
+import {
+  Copy,
+  Download,
+  ExternalLink,
+  KeyRound,
+  Shield,
+  Smartphone,
+  Trash2,
+  Upload,
+} from "lucide-react";
 
 import { clearAuth, setKeyPair } from "@/app/store/authSlice";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import {
   approveDevice,
   createPendingDevice,
@@ -20,13 +35,6 @@ import {
 import { keyStore } from "@/shared/lib/keystore";
 import { useEncryption } from "@/shared/hooks/useEncryption";
 import type { Device } from "@/shared/types";
-
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
-import { Textarea } from "@/components/ui/textarea";
 
 type DeviceView = Device & { current?: boolean };
 
@@ -290,7 +298,7 @@ export default function SecuritySettings() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="rounded-xl bg-muted p-3 font-mono text-xs text-muted-foreground break-all">
+          <div className="rounded-2xl border border-border/70 bg-secondary/50 p-3 font-mono text-xs text-muted-foreground break-all">
             {publicKeyPreview}
           </div>
           <div className="flex flex-wrap gap-2">
@@ -393,7 +401,12 @@ export default function SecuritySettings() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <Button data-testid="device-pairing-generate" size="sm" variant="secondary" onClick={() => void generatePairingPayload()}>
+          <Button
+            data-testid="device-pairing-generate"
+            size="sm"
+            variant="secondary"
+            onClick={() => void generatePairingPayload()}
+          >
             Generate pairing payload
           </Button>
 
@@ -407,19 +420,33 @@ export default function SecuritySettings() {
           />
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button data-testid="device-pairing-register-approve" size="sm" onClick={() => void handleRegisterAndApproveDevice()}>
+            <Button
+              data-testid="device-pairing-register-approve"
+              size="sm"
+              onClick={() => void handleRegisterAndApproveDevice()}
+            >
               Register and approve
             </Button>
-            <Button data-testid="device-pairing-register-pending" size="sm" variant="outline" onClick={() => void handleRegisterPendingDevice()}>
+            <Button
+              data-testid="device-pairing-register-pending"
+              size="sm"
+              variant="outline"
+              onClick={() => void handleRegisterPendingDevice()}
+            >
               Register pending device
             </Button>
-            <Button data-testid="device-pairing-approve-pending" size="sm" variant="secondary" onClick={() => void handleApprovePendingDevice()}>
+            <Button
+              data-testid="device-pairing-approve-pending"
+              size="sm"
+              variant="secondary"
+              onClick={() => void handleApprovePendingDevice()}
+            >
               Approve pending device
             </Button>
             {pendingDeviceId && <Badge variant="secondary">Pending: {pendingDeviceId}</Badge>}
           </div>
 
-          <div className="rounded-xl border border-border/60 bg-muted/40 p-4 text-sm text-muted-foreground">
+          <div className="rounded-2xl border border-border/60 bg-secondary/40 p-4 text-sm text-muted-foreground">
             <p className="font-medium text-foreground">Recommended flow</p>
             <p className="mt-1">
               Open the new-device link on the target browser, restore the encrypted backup there,
@@ -446,17 +473,21 @@ export default function SecuritySettings() {
               {pendingDevices.map((device) => (
                 <div
                   key={device.id}
-                  className="flex items-center justify-between gap-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3"
+                  className="flex items-center justify-between gap-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-3"
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-medium">{device.device_name || "Unnamed device"}</p>
                     <p className="text-xs text-muted-foreground">
-                      {device.platform} · created {new Date(device.created_at).toLocaleString("ko-KR")}
+                      {device.platform} • created {new Date(device.created_at).toLocaleString("en-US")}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary">Pending</Badge>
-                    <Button data-testid={`approve-device-${device.id}`} size="sm" onClick={() => void handleApproveSpecificDevice(device.id)}>
+                    <Button
+                      data-testid={`approve-device-${device.id}`}
+                      size="sm"
+                      onClick={() => void handleApproveSpecificDevice(device.id)}
+                    >
                       Approve
                     </Button>
                   </div>
@@ -469,15 +500,16 @@ export default function SecuritySettings() {
             {trustedDevices.map((device) => (
               <div
                 key={device.id}
-                className="flex items-center justify-between gap-4 rounded-xl bg-muted p-3"
+                className="flex items-center justify-between gap-4 rounded-2xl border border-border/70 bg-secondary/50 p-3"
               >
                 <div className="min-w-0">
                   <p className="text-sm font-medium">{device.device_name || "Unnamed device"}</p>
                   <p className="text-xs text-muted-foreground">
                     {device.platform}
-                    {device.last_seen && ` · last seen ${new Date(device.last_seen).toLocaleString("ko-KR")}`}
-                    {device.current && " · current"}
-                    {device.approved_by_device_id && !device.current && " · approved"}
+                    {device.last_seen &&
+                      ` • last seen ${new Date(device.last_seen).toLocaleString("en-US")}`}
+                    {device.current && " • current"}
+                    {device.approved_by_device_id && !device.current && " • approved"}
                   </p>
                 </div>
                 <Button

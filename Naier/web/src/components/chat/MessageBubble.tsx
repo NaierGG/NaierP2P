@@ -1,4 +1,5 @@
-import { Check, CheckCheck, AlertCircle, Clock } from "lucide-react";
+import { AlertCircle, Check, CheckCheck, Clock } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import type { Message } from "@/shared/types";
 
@@ -16,32 +17,32 @@ export default function MessageBubble({ message, isOwn, senderLabel }: MessageBu
     >
       <div
         className={cn(
-          "max-w-[70%] rounded-2xl px-4 py-2.5",
+          "max-w-[76%] rounded-[1.4rem] border px-4 py-3 shadow-[0_12px_28px_rgba(4,10,20,0.14)]",
           isOwn
-            ? "rounded-br-md bg-primary/15 text-foreground"
-            : "rounded-bl-md bg-bubble text-foreground"
+            ? "rounded-br-md border-primary/15 bg-bubble-own text-foreground"
+            : "rounded-bl-md border-border/70 bg-bubble text-foreground"
         )}
       >
         {!isOwn && (
-          <p className="mb-0.5 text-xs font-medium text-primary">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-primary/85">
             {senderLabel ?? message.sender_id.slice(0, 8)}
           </p>
         )}
 
-        <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+        <div className="whitespace-pre-wrap break-words text-sm leading-7">
           {message.is_deleted ? (
-            <span className="italic text-muted-foreground">삭제된 메시지</span>
+            <span className="italic text-muted-foreground">Deleted message</span>
           ) : (
             message.content
           )}
         </div>
 
         {message.reactions && message.reactions.length > 0 && (
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {message.reactions.map((reaction, i) => (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {message.reactions.map((reaction, index) => (
               <span
-                key={`${reaction.user_id}-${reaction.emoji}-${i}`}
-                className="inline-flex items-center rounded-full bg-accent px-1.5 py-0.5 text-xs"
+                key={`${reaction.user_id}-${reaction.emoji}-${index}`}
+                className="inline-flex items-center rounded-full border border-border/70 bg-accent/70 px-2 py-0.5 text-xs"
               >
                 {reaction.emoji}
               </span>
@@ -49,11 +50,18 @@ export default function MessageBubble({ message, isOwn, senderLabel }: MessageBu
           </div>
         )}
 
-        <div className={cn(
-          "mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground",
-          isOwn && "justify-end"
-        )}>
-          <span>{new Date(message.created_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</span>
+        <div
+          className={cn(
+            "mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground",
+            isOwn && "justify-end"
+          )}
+        >
+          <span>
+            {new Date(message.created_at).toLocaleTimeString("en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </span>
           {isOwn && <StatusIcon status={message.status} />}
         </div>
       </div>
